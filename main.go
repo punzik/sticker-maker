@@ -134,8 +134,15 @@ func run(args []string) error {
 			}
 			blk = dm.Render(bm, b.ModulePx, *b.QuietZoneModules)
 			bw, bh = dm.Size(b.Symbol.Rows, b.Symbol.Columns, b.ModulePx, *b.QuietZoneModules)
+		default:
+			// Config validation rejects other types; guard anyway so a
+			// future caller cannot nil-deref blk.
+			return fmt.Errorf("block %q: unsupported type %q", b.ID, b.Type)
 		}
-		rot := compose.Rotate(blk, b.Rotation)
+		rot, err := compose.Rotate(blk, b.Rotation)
+		if err != nil {
+			return fmt.Errorf("block %q: %w", b.ID, err)
+		}
 		rw, rh := bw, bh
 		if b.Rotation%180 == 90 {
 			rw, rh = bh, bw

@@ -44,7 +44,10 @@ func TestRotate(t *testing.T) {
 		{270, 2, 3, [][2]int{{0, 2}, {1, 2}, {1, 1}}},
 	}
 	for _, c := range cases {
-		got := Rotate(src, c.deg)
+		got, err := Rotate(src, c.deg)
+		if err != nil {
+			t.Fatalf("rot %d: %v", c.deg, err)
+		}
 		if got.Rect.Dx() != c.w || got.Rect.Dy() != c.h {
 			t.Fatalf("rot %d: size %dx%d want %dx%d", c.deg, got.Rect.Dx(), got.Rect.Dy(), c.w, c.h)
 		}
@@ -68,6 +71,12 @@ func TestRotate(t *testing.T) {
 				t.Fatalf("rot %d: missing black px %v (got %v)", c.deg, p, black)
 			}
 		}
+	}
+}
+
+func TestRotateBadAngle(t *testing.T) {
+	if _, err := Rotate(lShape(), 45); err == nil {
+		t.Fatal("want error for non-multiple-of-90 angle")
 	}
 }
 

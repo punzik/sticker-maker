@@ -25,12 +25,14 @@ func (a Rect) Intersects(b Rect) bool {
 	return a.X < b.X+b.W && b.X < a.X+a.W && a.Y < b.Y+b.H && b.Y < a.Y+a.H
 }
 
-// Rotate rotates a bitmap clockwise by deg (0, 90, 180 or 270).
-func Rotate(img *image.Gray, deg int) *image.Gray {
+// Rotate rotates a bitmap clockwise by deg. Only multiples of 90 are
+// supported; anything else is an error (config validation makes this
+// unreachable from the CLI, but the library should not panic).
+func Rotate(img *image.Gray, deg int) (*image.Gray, error) {
 	w, h := img.Rect.Dx(), img.Rect.Dy()
 	switch deg % 360 {
 	case 0:
-		return copyGray(img)
+		return copyGray(img), nil
 	case 90: // clockwise: (x,y) -> (h-1-y, x)
 		out := image.NewGray(image.Rect(0, 0, h, w))
 		for y := 0; y < h; y++ {
@@ -38,7 +40,7 @@ func Rotate(img *image.Gray, deg int) *image.Gray {
 				out.SetGray(h-1-y, x, img.GrayAt(x, y))
 			}
 		}
-		return out
+		return out, nil
 	case 180: // (x,y) -> (w-1-x, h-1-y)
 		out := image.NewGray(image.Rect(0, 0, w, h))
 		for y := 0; y < h; y++ {
@@ -46,7 +48,7 @@ func Rotate(img *image.Gray, deg int) *image.Gray {
 				out.SetGray(w-1-x, h-1-y, img.GrayAt(x, y))
 			}
 		}
-		return out
+		return out, nil
 	case 270: // clockwise: (x,y) -> (y, w-1-x)
 		out := image.NewGray(image.Rect(0, 0, h, w))
 		for y := 0; y < h; y++ {
@@ -54,9 +56,9 @@ func Rotate(img *image.Gray, deg int) *image.Gray {
 				out.SetGray(y, w-1-x, img.GrayAt(x, y))
 			}
 		}
-		return out
+		return out, nil
 	default:
-		panic(fmt.Sprintf("rotate: unsupported angle %d", deg))
+		return nil, fmt.Errorf("rotate: unsupported angle %d (want a multiple of 90)", deg)
 	}
 }
 
@@ -117,7 +119,9 @@ func CheckBoundsAndOverlaps(placed []NamedRect, canvas Rect) error {
 	return nil
 }
 
-// Finalize verifies that the image contains exactly two colors.
+// Finalize verifies that the output contains no anti-aliased or gray
+// pixels: every pixel is black (0) or white (255). An image using fewer
+// than two colors is valid — for example a layout with no content.
 func Finalize(img *image.Gray) error {
 	seen := map[uint8]bool{}
 	for y := 0; y < img.Rect.Dy(); y++ {
