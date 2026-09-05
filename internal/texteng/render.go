@@ -90,7 +90,11 @@ type line struct {
 
 // Wrap splits text into lines no wider than maxNatural (px, unscaled).
 // Explicit newlines are always preserved. measure returns the natural
-// width of a string.
+// width of a string. Both the wrap decision and the width reported in
+// each line use the measurement of the whole candidate line, so kerning
+// and rounding are resolved the same way as in the width check in Render.
+// This makes the wrapping O(n^2) in the paragraph length, which is
+// irrelevant for label-sized text.
 func Wrap(text string, maxNatural float64, mode string, measure func(string) (float64, error)) []line {
 	if text == "" {
 		return nil
@@ -131,6 +135,9 @@ func splitParagraphs(text string) []string {
 
 // wrapWords does greedy word wrapping. When breakLong is true, a word that
 // does not fit on an empty line is broken character by character.
+// curW always equals measure(string(cur)): adding a word remeasures the
+// whole candidate line, because summing per-word widths ignores kerning
+// and per-part rounding.
 func wrapWords(para string, maxW float64, measure func(string) (float64, error), breakLong bool) []line {
 	var lines []line
 	var cur []rune
@@ -139,8 +146,7 @@ func wrapWords(para string, maxW float64, measure func(string) (float64, error),
 		if len(cur) == 0 {
 			return
 		}
-		w, _ := measure(string(cur))
-		lines = append(lines, line{string(cur), w})
+		lines = append(lines, line{string(cur), curW})
 		cur = nil
 		curW = 0
 	}
@@ -163,7 +169,7 @@ func wrapWords(para string, maxW float64, measure func(string) (float64, error),
 		if len(cur) == 0 {
 			if wordW <= maxW {
 				cur = append(cur, []rune(word)...)
-				curW += wordW
+				curW = wordW
 			} else if breakLong {
 				lines = append(lines, wrapChars(word, maxW, measure)...)
 			} else {
@@ -173,11 +179,11 @@ func wrapWords(para string, maxW float64, measure func(string) (float64, error),
 			i = j
 			continue
 		}
-		spaceW, _ := measure(" ")
-		if curW+spaceW+wordW <= maxW {
-			cur = append(cur, ' ')
-			cur = append(cur, []rune(word)...)
-			curW += spaceW + wordW
+		cand := string(cur) + " " + word
+		candW, _ := measure(cand)
+		if candW <= maxW {
+			cur = []rune(cand)
+			curW = candW
 			i = j
 		} else {
 			// The word starts a new line; reprocess it with an empty line.
@@ -188,25 +194,36 @@ func wrapWords(para string, maxW float64, measure func(string) (float64, error),
 	return lines
 }
 
+// wrapChars breaks text by characters. Like wrapWords, curW always equals
+// measure(string(cur)).
 func wrapChars(para string, maxW float64, measure func(string) (float64, error)) []line {
 	var lines []line
 	var cur []rune
 	curW := 0.0
-	for _, r := range para {
-		rw, _ := measure(string(r))
-		if len(cur) > 0 && curW+rw > maxW {
-			w, _ := measure(string(cur))
-			lines = append(lines, line{string(cur), w})
-			cur = nil
-			curW = 0
+	flush := func() {
+		if len(cur) == 0 {
+			return
 		}
-		cur = append(cur, r)
-		curW += rw
+		lines = append(lines, line{string(cur), curW})
+		cur = nil
+		curW = 0
 	}
-	if len(cur) > 0 {
-		w, _ := measure(string(cur))
-		lines = append(lines, line{string(cur), w})
+	for _, r := range para {
+		if len(cur) > 0 {
+			cand := string(cur) + string(r)
+			candW, _ := measure(cand)
+			if candW <= maxW {
+				cur = []rune(cand)
+				curW = candW
+				continue
+			}
+			flush()
+		}
+		rw, _ := measure(string(r))
+		cur = []rune{r}
+		curW = rw
 	}
+	flush()
 	return lines
 }
 

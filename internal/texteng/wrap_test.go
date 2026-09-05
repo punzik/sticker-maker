@@ -1,6 +1,10 @@
 package texteng
 
-import "testing"
+import (
+	"math"
+	"strings"
+	"testing"
+)
 
 // measure1 is a deterministic fake: every rune is 1px, space is 1px.
 func measure1(s string) (float64, error) { return float64(len([]rune(s))), nil }
@@ -86,6 +90,32 @@ func TestWrapEmptyAndSpaces(t *testing.T) {
 	lines = Wrap("ab\n\ncd", 100, "word_char", measure1)
 	if len(lines) != 3 || lines[0].text != "ab" || lines[1].text != "" || lines[2].text != "cd" {
 		t.Fatalf("blank line: %#v", lines)
+	}
+}
+
+// measureRound gives every rune a 1.4 px width and rounds the total to
+// integer px, like Face.Measure. Rounding makes the measure non-additive:
+// summing per-part widths drifts away from measuring the whole line.
+func measureRound(s string) (float64, error) {
+	return math.Round(1.4 * float64(len([]rune(s)))), nil
+}
+
+// TestWrapConsistentWidths checks that every wrapped line reports a width
+// within maxW and does not lose content. With per-part accumulation the
+// old code could emit "aaa" (width 4) for maxW 3.5 in char mode.
+func TestWrapConsistentWidths(t *testing.T) {
+	for _, mode := range []string{"char", "word_char"} {
+		lines := Wrap("aaaaaa aaaaaa", 3.5, mode, measureRound)
+		total := ""
+		for _, l := range lines {
+			if l.width > 3.5+1e-6 {
+				t.Fatalf("mode %s: line %q width %f exceeds max 3.5", mode, l.text, l.width)
+			}
+			total += l.text
+		}
+		if want := "aaaaaaaaaaaa"; strings.ReplaceAll(total, " ", "") != want {
+			t.Fatalf("mode %s: content mangled: %q", mode, total)
+		}
 	}
 }
 
