@@ -36,19 +36,19 @@ type Block struct {
 	Rotation int    `json:"rotation"`
 
 	// Text blocks only.
-	Width    int     `json:"width,omitempty"`
-	Height   int     `json:"height,omitempty"`
-	Font     *Font   `json:"font,omitempty"`
-	ScaleX   float64 `json:"scale_x,omitempty"`
-	Wrap     string  `json:"wrap,omitempty"`
-	Align    string  `json:"align,omitempty"`
-	Valign   string  `json:"valign,omitempty"`
-	Overflow string  `json:"overflow,omitempty"`
+	Width    int      `json:"width,omitempty"`
+	Height   int      `json:"height,omitempty"`
+	Font     *Font    `json:"font,omitempty"`
+	ScaleX   *float64 `json:"scale_x,omitempty"`
+	Wrap     *string  `json:"wrap,omitempty"`
+	Align    *string  `json:"align,omitempty"`
+	Valign   *string  `json:"valign,omitempty"`
+	Overflow *string  `json:"overflow,omitempty"`
 
 	// Data Matrix blocks only.
-	Symbol      *Symbol `json:"symbol,omitempty"`
-	ModulePx    int     `json:"module_px,omitempty"`
-	QuietZonePx int     `json:"quiet_zone_modules,omitempty"`
+	Symbol           *Symbol `json:"symbol,omitempty"`
+	ModulePx         int     `json:"module_px,omitempty"`
+	QuietZoneModules *int    `json:"quiet_zone_modules,omitempty"`
 
 	// Content source: exactly one of Text or Field must be set.
 	Text  *string `json:"text,omitempty"`
@@ -72,28 +72,39 @@ type Symbol struct {
 	Columns int `json:"columns"`
 }
 
-// Defaults applied before validation.
+// applyDefaults fills omitted optional fields with documented defaults.
+// Optional fields are pointers so that "absent" is distinguishable from an
+// explicit zero/empty value: explicit values survive here and are rejected
+// by Validate when they violate the documented constraints. Only fields of
+// the block's own type are defaulted, so validateApplicability can still
+// see foreign fields as explicitly set.
 func (b *Block) applyDefaults() {
-	if b.Rotation == 0 {
-		// keep
+	if b.Type == "text" {
+		if b.ScaleX == nil {
+			v := 1.0
+			b.ScaleX = &v
+		}
+		if b.Wrap == nil {
+			v := "word_char"
+			b.Wrap = &v
+		}
+		if b.Align == nil {
+			v := "left"
+			b.Align = &v
+		}
+		if b.Valign == nil {
+			v := "top"
+			b.Valign = &v
+		}
+		if b.Overflow == nil {
+			v := "error"
+			b.Overflow = &v
+		}
+		return
 	}
-	if b.ScaleX == 0 {
-		b.ScaleX = 1.0
-	}
-	if b.Wrap == "" {
-		b.Wrap = "word_char"
-	}
-	if b.Align == "" {
-		b.Align = "left"
-	}
-	if b.Valign == "" {
-		b.Valign = "top"
-	}
-	if b.Overflow == "" {
-		b.Overflow = "error"
-	}
-	if b.QuietZonePx == 0 {
-		b.QuietZonePx = 1
+	if b.Type == "datamatrix" && b.QuietZoneModules == nil {
+		v := 1
+		b.QuietZoneModules = &v
 	}
 }
 
@@ -159,13 +170,60 @@ func (b *Block) Validate(i int) error {
 		return fmt.Errorf("block %q: exactly one of \"text\" or \"field\" must be set", b.ID)
 	}
 	switch b.Type {
-	case "text":
-		return b.validateText()
-	case "datamatrix":
-		return b.validateDataMatrix()
+	case "text", "datamatrix":
 	default:
 		return fmt.Errorf("block %q: unknown type %q (want \"text\" or \"datamatrix\")", b.ID, b.Type)
 	}
+	if err := b.validateApplicability(); err != nil {
+		return err
+	}
+	switch b.Type {
+	case "text":
+		return b.validateText()
+	default: // "datamatrix", the only other accepted type
+		return b.validateDataMatrix()
+	}
+}
+
+// validateApplicability rejects fields that belong to the other block type:
+// strict parsing covers unknown field names only, and both types share one
+// struct, so a "width" inside a datamatrix block would otherwise be
+// silently ignored.
+func (b *Block) validateApplicability() error {
+	var fields []struct {
+		name string
+		set  bool
+	}
+	if b.Type == "text" {
+		fields = []struct {
+			name string
+			set  bool
+		}{
+			{"symbol", b.Symbol != nil},
+			{"module_px", b.ModulePx != 0},
+			{"quiet_zone_modules", b.QuietZoneModules != nil},
+		}
+	} else {
+		fields = []struct {
+			name string
+			set  bool
+		}{
+			{"width", b.Width != 0},
+			{"height", b.Height != 0},
+			{"font", b.Font != nil},
+			{"scale_x", b.ScaleX != nil},
+			{"wrap", b.Wrap != nil},
+			{"align", b.Align != nil},
+			{"valign", b.Valign != nil},
+			{"overflow", b.Overflow != nil},
+		}
+	}
+	for _, f := range fields {
+		if f.set {
+			return fmt.Errorf("block %q: field %q does not apply to a %s block", b.ID, f.name, b.Type)
+		}
+	}
+	return nil
 }
 
 func (b *Block) validateText() error {
@@ -183,28 +241,28 @@ func (b *Block) validateText() error {
 	if hasFamily == hasFile {
 		return fmt.Errorf("block %q: font requires exactly one of \"family\" or \"file\"", b.ID)
 	}
-	if b.ScaleX <= 0 || math.IsNaN(b.ScaleX) {
+	if *b.ScaleX <= 0 || math.IsNaN(*b.ScaleX) {
 		return fmt.Errorf("block %q: scale_x must be positive", b.ID)
 	}
-	switch b.Wrap {
+	switch *b.Wrap {
 	case "word", "char", "word_char", "none":
 	default:
-		return fmt.Errorf("block %q: invalid wrap %q", b.ID, b.Wrap)
+		return fmt.Errorf("block %q: invalid wrap %q", b.ID, *b.Wrap)
 	}
-	switch b.Align {
+	switch *b.Align {
 	case "left", "center", "right":
 	default:
-		return fmt.Errorf("block %q: invalid align %q", b.ID, b.Align)
+		return fmt.Errorf("block %q: invalid align %q", b.ID, *b.Align)
 	}
-	switch b.Valign {
+	switch *b.Valign {
 	case "top", "center", "bottom":
 	default:
-		return fmt.Errorf("block %q: invalid valign %q", b.ID, b.Valign)
+		return fmt.Errorf("block %q: invalid valign %q", b.ID, *b.Valign)
 	}
-	switch b.Overflow {
+	switch *b.Overflow {
 	case "error", "clip":
 	default:
-		return fmt.Errorf("block %q: invalid overflow %q", b.ID, b.Overflow)
+		return fmt.Errorf("block %q: invalid overflow %q", b.ID, *b.Overflow)
 	}
 	return nil
 }
@@ -219,7 +277,7 @@ func (b *Block) validateDataMatrix() error {
 	if b.ModulePx < 1 {
 		return fmt.Errorf("block %q: module_px must be a positive integer", b.ID)
 	}
-	if b.QuietZonePx < 1 {
+	if *b.QuietZoneModules < 1 {
 		return fmt.Errorf("block %q: quiet_zone_modules must be at least 1", b.ID)
 	}
 	return nil

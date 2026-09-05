@@ -113,8 +113,8 @@ func run(args []string) error {
 				return fmt.Errorf("block %q: %w", b.ID, err)
 			}
 			res, err := face.Render(content, texteng.Params{
-				Width: b.Width, Height: b.Height, ScaleX: b.ScaleX,
-				Wrap: b.Wrap, Align: b.Align, Valign: b.Valign, Overflow: b.Overflow,
+				Width: b.Width, Height: b.Height, ScaleX: *b.ScaleX,
+				Wrap: *b.Wrap, Align: *b.Align, Valign: *b.Valign, Overflow: *b.Overflow,
 			})
 			if err != nil {
 				return fmt.Errorf("block %q: %w", b.ID, err)
@@ -126,8 +126,8 @@ func run(args []string) error {
 			if err != nil {
 				return fmt.Errorf("block %q: %w", b.ID, err)
 			}
-			blk = dm.Render(bm, b.ModulePx, b.QuietZonePx)
-			bw, bh = dm.Size(b.Symbol.Rows, b.Symbol.Columns, b.ModulePx, b.QuietZonePx)
+			blk = dm.Render(bm, b.ModulePx, *b.QuietZoneModules)
+			bw, bh = dm.Size(b.Symbol.Rows, b.Symbol.Columns, b.ModulePx, *b.QuietZoneModules)
 		}
 		rot := compose.Rotate(blk, b.Rotation)
 		rw, rh := bw, bh

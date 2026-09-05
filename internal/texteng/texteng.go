@@ -81,6 +81,18 @@ func (f *Face) Measure(s string) (float64, error) {
 	return float64(w.Round()), nil
 }
 
+// CheckGlyphs reports the first rune of s for which the face has no glyph.
+// font.Drawer skips such runes silently, so Render checks up front to
+// guarantee that no content is lost.
+func (f *Face) CheckGlyphs(s string) error {
+	for _, r := range s {
+		if _, ok := f.face.GlyphAdvance(r); !ok {
+			return fmt.Errorf("font is missing a glyph for U+%04X", r)
+		}
+	}
+	return nil
+}
+
 // List returns "family|style|file" lines for all fonts known to fontconfig.
 func List() ([]string, error) {
 	out, err := exec.Command("fc-list", "--format", "%{family}\t%{style}\t%{file}\n").Output()

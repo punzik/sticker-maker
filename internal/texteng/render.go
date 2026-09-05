@@ -28,8 +28,12 @@ type RenderResult struct {
 }
 
 // Render lays out and rasterizes text into a block bitmap.
-// It returns an error when the text does not fit and Overflow is "error".
+// It returns an error when the text does not fit and Overflow is "error",
+// or when the font is missing a glyph for some rune.
 func (f *Face) Render(text string, p Params) (*RenderResult, error) {
+	if err := f.CheckGlyphs(text); err != nil {
+		return nil, err
+	}
 	maxNatural := float64(p.Width) / p.ScaleX
 	lines := Wrap(text, maxNatural, p.Wrap, f.Measure)
 
