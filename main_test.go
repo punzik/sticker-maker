@@ -139,6 +139,25 @@ func TestEmptyTextRejected(t *testing.T) {
 	}
 }
 
+func TestUnknownFlagSuggestion(t *testing.T) {
+	var ue *usageError
+	err := run([]string{"--laytout"})
+	if !errors.As(err, &ue) {
+		t.Fatalf("run(--laytout): want usageError, got %v", err)
+	}
+	if !strings.Contains(ue.msg, "did you mean --layout?") {
+		t.Fatalf("want suggestion for --layout, got %q", ue.msg)
+	}
+	// A name far from every known flag gets no suggestion.
+	err = run([]string{"--zzz"})
+	if !errors.As(err, &ue) {
+		t.Fatalf("run(--zzz): want usageError, got %v", err)
+	}
+	if strings.Contains(ue.msg, "did you mean") {
+		t.Fatalf("unexpected suggestion in %q", ue.msg)
+	}
+}
+
 func TestVersionFlag(t *testing.T) {
 	if err := run([]string{"--version"}); err != nil {
 		t.Fatalf("run(--version): %v", err)

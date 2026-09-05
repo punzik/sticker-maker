@@ -25,19 +25,31 @@ func main() {
 	if err == nil {
 		return
 	}
-	if errors.Is(err, flag.ErrHelp) {
-		printUsage(os.Stdout)
-		return // --help/-h: print usage and exit 0
-	}
-	if err == errUsage {
+	var ue *usageError
+	switch {
+	case errors.Is(err, flag.ErrHelp):
+		printUsage(os.Stdout) // -h/--help: print usage and exit 0
+	case err == errUsage, errors.As(err, &ue):
+		// Usage error: show the explanation (if any), the usage text,
+		// and the conventional exit code.
+		if ue != nil && ue.msg != "" {
+			fmt.Fprintln(os.Stderr, "sticker-maker:", ue.msg)
+		}
 		printUsage(os.Stderr)
-		os.Exit(2) // usage error, per convention
+		os.Exit(2)
+	default:
+		fmt.Fprintln(os.Stderr, "sticker-maker:", err)
+		os.Exit(1) // runtime error
 	}
-	fmt.Fprintln(os.Stderr, "sticker-maker:", err)
-	os.Exit(1) // runtime error
 }
 
 var errUsage = fmt.Errorf("usage error")
+
+// usageError is a usage error with a user-facing explanation to print
+// above the usage text.
+type usageError struct{ msg string }
+
+func (e *usageError) Error() string { return e.msg }
 
 // version is the tool version; override at build time with
 // -ldflags "-X main.version=...".
@@ -70,6 +82,66 @@ func printUsage(w io.Writer) {
 	fmt.Fprint(w, usageText)
 }
 
+// flagParseMessage renders a flag package parse error and, for an
+// unknown flag, appends a "did you mean" suggestion for the closest
+// known flag name.
+func flagParseMessage(fs *flag.FlagSet, err error) string {
+	msg := err.Error()
+	const prefix = "flag provided but not defined: "
+	i := strings.Index(msg, prefix)
+	if i < 0 {
+		return msg
+	}
+	name := strings.TrimLeft(strings.TrimSpace(msg[i+len(prefix):]), "-")
+	if hint := suggestFlag(fs, name); hint != "" {
+		msg += fmt.Sprintf(" (did you mean --%s?)", hint)
+	}
+	return msg
+}
+
+// suggestFlag returns the closest flag name within a small edit distance.
+func suggestFlag(fs *flag.FlagSet, name string) string {
+	best, bestDist := "", 1<<32
+	fs.VisitAll(func(f *flag.Flag) {
+		if d := editDistance(f.Name, name); d < bestDist {
+			best, bestDist = f.Name, d
+		}
+	})
+	if bestDist <= 2 {
+		return best
+	}
+	return ""
+}
+
+func editDistance(a, b string) int {
+	dist := make([]int, len(b)+1)
+	for j := range dist {
+		dist[j] = j
+	}
+	for i := 1; i <= len(a); i++ {
+		prev := dist[0]
+		dist[0] = i
+		for j := 1; j <= len(b); j++ {
+			cost := 1
+			if a[i-1] == b[j-1] {
+				cost = 0
+			}
+			prev, dist[j] = dist[j], min3(dist[j]+1, dist[j-1]+1, prev+cost)
+		}
+	}
+	return dist[len(b)]
+}
+
+func min3(a, b, c int) int {
+	if b < a {
+		a = b
+	}
+	if c < a {
+		a = c
+	}
+	return a
+}
+
 type fieldList []string
 
 func (f *fieldList) String() string { return strings.Join(*f, ", ") }
@@ -84,11 +156,12 @@ func (f *fieldList) Set(s string) error {
 
 func run(args []string) error {
 	fs := flag.NewFlagSet("sticker-maker", flag.ContinueOnError)
-	fs.SetOutput(nil)
+	// The flag package never prints here (SetOutput(nil) would reset the
+	// destination back to stderr, so discard it explicitly); all messages
+	// are printed by main, and flag documentation lives in usageText.
+	fs.SetOutput(io.Discard)
 	fs.Usage = func() {} // usage is printed by main, not by the flag package
 	var fields fieldList
-	// The flag package never prints here (output is nil); the flag
-	// documentation lives in usageText.
 	layoutPath := fs.String("layout", "", "")
 	outputPath := fs.String("output", "", "")
 	listFonts := fs.Bool("list-fonts", false, "")
@@ -98,7 +171,7 @@ func run(args []string) error {
 		if errors.Is(err, flag.ErrHelp) {
 			return err // -h/--help: let main print usage and exit 0
 		}
-		return errUsage
+		return &usageError{msg: flagParseMessage(fs, err)}
 	}
 	if *showVersion {
 		fmt.Fprintf(os.Stdout, "sticker-maker %s\n", version)
