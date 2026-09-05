@@ -99,6 +99,11 @@ func run(args []string) error {
 		if err != nil {
 			return err
 		}
+		if b.Type == "text" && strings.TrimSpace(content) == "" {
+			// An empty text block would print as blank; reject it the way
+			// datamatrix rejects empty content, per the README.
+			return fmt.Errorf("block %q: content must not be empty", b.ID)
+		}
 		var blk *image.Gray
 		var bw, bh int
 		switch b.Type {

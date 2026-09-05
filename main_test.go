@@ -102,6 +102,19 @@ func TestMissingField(t *testing.T) {
 	}
 }
 
+func TestEmptyTextRejected(t *testing.T) {
+	dir := t.TempDir()
+	lp := writeLayout(t, `{"version":1,"image":{"width":40,"height":40},"blocks":[{"id":"t","type":"text","x":0,"y":0,"width":40,"height":20,"field":"empty","font":{"family":"DejaVu Sans","size_px":12}}]}`)
+	err := run([]string{"--layout", lp, "--output", filepath.Join(dir, "x.png"), "--field", "empty="})
+	if err == nil || !strings.Contains(err.Error(), "must not be empty") {
+		t.Fatalf("want empty content error, got %v", err)
+	}
+	lp = writeLayout(t, `{"version":1,"image":{"width":40,"height":40},"blocks":[{"id":"t","type":"text","x":0,"y":0,"width":40,"height":20,"text":"   ","font":{"family":"DejaVu Sans","size_px":12}}]}`)
+	if err := run([]string{"--layout", lp, "--output", filepath.Join(dir, "y.png")}); err == nil {
+		t.Fatal("want error for whitespace-only static text")
+	}
+}
+
 func TestUsage(t *testing.T) {
 	if err := run(nil); err != errUsage {
 		t.Fatalf("want usage error, got %v", err)
