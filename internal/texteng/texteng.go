@@ -102,49 +102,147 @@ func List() ([]string, error) {
 	return strings.Split(strings.TrimRight(string(out), "\n"), "\n"), nil
 }
 
+// fontEntry is one row of the system font database.
+type fontEntry struct {
+	Family string
+	Style  string
+	File   string
+}
+
+// listFonts returns every font known to fontconfig in one query.
+// Matching is then done in Go instead of building fc-match patterns,
+// which keeps family/style values from ever being interpreted as
+// pattern syntax.
+func listFonts() ([]fontEntry, error) {
+	out, err := exec.Command("fc-list", "--format", "%{family}\t%{style}\t%{file}\n").Output()
+	if err != nil {
+		return nil, fmt.Errorf("fc-list: %w (is fontconfig installed?)", err)
+	}
+	var fonts []fontEntry
+	for _, ln := range strings.Split(strings.TrimRight(string(out), "\n"), "\n") {
+		f := parseFontLine(ln)
+		if f != nil {
+			fonts = append(fonts, *f)
+		}
+	}
+	if len(fonts) == 0 {
+		return nil, errors.New("no system fonts found")
+	}
+	return fonts, nil
+}
+
+func parseFontLine(ln string) *fontEntry {
+	parts := strings.SplitN(ln, "\t", 3)
+	if len(parts) != 3 || parts[2] == "" {
+		return nil
+	}
+	return &fontEntry{Family: strings.TrimSpace(parts[0]), Style: strings.TrimSpace(parts[1]), File: parts[2]}
+}
+
+// familyNames splits the fc-list family column: fontconfig separates
+// families by ":" and aliases inside a family by ",".
+func familyNames(col string) []string {
+	var names []string
+	for _, grp := range strings.Split(col, ":") {
+		for _, n := range strings.Split(grp, ",") {
+			if n = strings.TrimSpace(n); n != "" {
+				names = append(names, n)
+			}
+		}
+	}
+	return names
+}
+
+// familyMatches reports whether the font family contains the requested
+// name (case-insensitively). Comparing list elements instead of the whole
+// colon-joined string avoids false "not found" for fonts with aliases.
+func familyMatches(font fontEntry, want string) bool {
+	for _, n := range familyNames(font.Family) {
+		if strings.EqualFold(n, want) {
+			return true
+		}
+	}
+	return false
+}
+
 // resolvePath maps the font selection to a font file, verifying that the
 // fontconfig fallback did not silently substitute another face.
 func resolvePath(o Options) (string, error) {
 	if o.File != "" {
 		return o.File, nil
 	}
-	pattern := o.Family
-	if o.Style != "" {
-		pattern += ":style=" + o.Style
-	}
-	file, err := fcMatch(pattern, "%{file}")
+	fonts, err := listFonts()
 	if err != nil {
 		return "", err
 	}
-	fam, err := fcMatch(pattern, "%{family}")
+	f, err := matchFont(fonts, o.Family, o.Style)
 	if err != nil {
 		return "", err
 	}
-	if !strings.EqualFold(strings.TrimSpace(fam), o.Family) {
-		return "", errors.New("font family " + quote(o.Family) + " not found (fontconfig fell back to " + quote(fam) + ")")
-	}
-	if o.Style != "" {
-		st, err := fcMatch(pattern, "%{style}")
-		if err != nil {
-			return "", err
-		}
-		if !strings.EqualFold(strings.TrimSpace(st), o.Style) {
-			return "", errors.New("font style " + quote(o.Style) + " not found for family " + quote(o.Family) + " (fontconfig fell back to " + quote(st) + ")")
-		}
-	}
-	return file, nil
+	return f.File, nil
 }
 
-func fcMatch(pattern, format string) (string, error) {
-	out, err := exec.Command("fc-match", "-f", format+"\n", pattern).Output()
-	if err != nil {
-		return "", fmt.Errorf("fc-match %q: %w", pattern, err)
+// matchFont selects the font for family (and style, when non-empty) from
+// the database. Both values are matched as opaque strings: family against
+// the individual names of each entry, style case-insensitively as a whole
+// column value. A missing style is an error — no silent substitution, as
+// per the README.
+//
+// An entry whose primary family (first name) equals the request beats one
+// that only carries the name as an alias, and among those, the earlier
+// database entry wins. This mirrors fontconfig's preference for exact
+// families, so "DejaVu Sans:Bold" never resolves to a condensed alias
+// face regardless of database order.
+func matchFont(fonts []fontEntry, family, style string) (*fontEntry, error) {
+	var best *fontEntry
+	bestFam := 2
+	for i := range fonts {
+		f := &fonts[i]
+		names := familyNames(f.Family)
+		if len(names) == 0 {
+			continue
+		}
+		famScore := 2 // alias match
+		if strings.EqualFold(names[0], family) {
+			famScore = 1 // primary family match
+		} else if !familyMatches(*f, family) {
+			continue
+		}
+		if style != "" && !strings.EqualFold(f.Style, style) {
+			continue
+		}
+		if best == nil || famScore < bestFam {
+			best, bestFam = f, famScore
+		}
 	}
-	s := strings.TrimSpace(string(out))
-	if s == "" {
-		return "", fmt.Errorf("fc-match %q: empty result", pattern)
+	if best == nil && availableStyles(fonts, family) != "" {
+		return nil, fmt.Errorf("font style %q not found for family %q (available styles: %s)",
+			style, family, availableStyles(fonts, family))
 	}
-	return s, nil
+	if best == nil {
+		return nil, fmt.Errorf("font family %q not found (use --list-fonts to see installed families)", family)
+	}
+	return best, nil
 }
 
-func quote(s string) string { return "\"" + s + "\"" }
+// availableStyles returns the distinct styles of the requested family,
+// in install order, for error messages.
+func availableStyles(fonts []fontEntry, family string) string {
+	var seen []string
+	for _, f := range fonts {
+		if !familyMatches(f, family) || f.Style == "" {
+			continue
+		}
+		dup := false
+		for _, s := range seen {
+			if strings.EqualFold(s, f.Style) {
+				dup = true
+				break
+			}
+		}
+		if !dup {
+			seen = append(seen, f.Style)
+		}
+	}
+	return strings.Join(seen, ", ")
+}
