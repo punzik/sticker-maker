@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "image": {
+    "width": 200,
+    "height": 120
+  },
+  "blocks": [
+    {
+      "id": "vertical",
+      "type": "text",
+      "x": 10,
+      "y": 10,
+      "width": 100,
+      "height": 56,
+      "text": "Vertical text",
+      "font": {
+        "family": "DejaVu Sans",
+        "style": "Book",
+        "size_px": 24
+      },
+      "align": "left",
+      "valign": "top",
+      "rotation": 90
+    },
+    {
+      "id": "rect_code",
+      "type": "datamatrix",
+      "x": 90,
+      "y": 45,
+      "field": "code",
+      "symbol": {
+        "rows": 8,
+        "columns": 18
+      },
+      "module_px": 3,
+      "quiet_zone_modules": 1
+    }
+  ]
+}

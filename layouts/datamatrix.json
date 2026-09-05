@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "image": {
+    "width": 136,
+    "height": 136
+  },
+  "blocks": [
+    {
+      "id": "code",
+      "type": "datamatrix",
+      "x": 3,
+      "y": 3,
+      "field": "code",
+      "symbol": {
+        "rows": 24,
+        "columns": 24
+      },
+      "module_px": 5,
+      "quiet_zone_modules": 1
+    }
+  ]
+}

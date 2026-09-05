@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "image": { "width": 384, "height": 200 },
+  "blocks": [
+    {
+      "id": "title",
+      "type": "text",
+      "x": 12,
+      "y": 12,
+      "width": 228,
+      "height": 120,
+      "field": "title",
+      "font": { "family": "DejaVu Sans", "style": "Book", "size_px": 24 },
+      "scale_x": 1.0,
+      "wrap": "word_char",
+      "align": "left",
+      "valign": "top",
+      "overflow": "error"
+    },
+    {
+      "id": "note",
+      "type": "text",
+      "x": 12,
+      "y": 146,
+      "width": 360,
+      "height": 44,
+      "text": "Component shelf label",
+      "font": { "family": "DejaVu Sans", "style": "Oblique", "size_px": 18 },
+      "scale_x": 1.0,
+      "align": "left",
+      "valign": "top"
+    },
+    {
+      "id": "code",
+      "type": "datamatrix",
+      "x": 246,
+      "y": 12,
+      "field": "code",
+      "symbol": { "rows": 24, "columns": 24 },
+      "module_px": 5,
+      "quiet_zone_modules": 1
+    }
+  ]
+}

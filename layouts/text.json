@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "image": {
+    "width": 384,
+    "height": 116
+  },
+  "blocks": [
+    {
+      "id": "label",
+      "type": "text",
+      "x": 8,
+      "y": 8,
+      "width": 368,
+      "height": 100,
+      "field": "label",
+      "font": {
+        "family": "DejaVu Sans",
+        "style": "Bold",
+        "size_px": 28
+      },
+      "scale_x": 1.1,
+      "wrap": "word_char",
+      "align": "center",
+      "valign": "center"
+    }
+  ]
+}
