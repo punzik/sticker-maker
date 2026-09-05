@@ -10,6 +10,7 @@ import (
 	"image/png"
 	"io"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -160,15 +161,39 @@ func run(args []string) error {
 	if err := compose.Finalize(canvas); err != nil {
 		return err
 	}
-	f, err := os.Create(*outputPath)
+	return writePNG(*outputPath, canvas)
+}
+
+// writePNG encodes the canvas into a temporary file in the destination
+// directory and renames it into place, so a failure while encoding or
+// writing never leaves a truncated result file behind.
+func writePNG(path string, canvas image.Image) error {
+	f, err := os.CreateTemp(filepath.Dir(path), ".sticker-*.tmp")
 	if err != nil {
 		return err
 	}
+	tmp := f.Name()
+	defer os.Remove(tmp)
 	if err := png.Encode(f, canvas); err != nil {
 		f.Close()
-		return fmt.Errorf("write %s: %w", *outputPath, err)
+		return fmt.Errorf("write %s: %w", path, err)
 	}
-	return f.Close()
+	return finishTemp(f, path, tmp)
+}
+
+// finishTemp fsyncs, closes and renames a fully written temp file.
+func finishTemp(f *os.File, path, tmp string) error {
+	if err := f.Sync(); err != nil {
+		f.Close()
+		return fmt.Errorf("write %s: %w", path, err)
+	}
+	if err := f.Close(); err != nil {
+		return fmt.Errorf("write %s: %w", path, err)
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		return fmt.Errorf("write %s: %w", path, err)
+	}
+	return nil
 }
 
 func parseFields(list []string) (config.Fields, error) {

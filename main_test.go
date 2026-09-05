@@ -102,6 +102,30 @@ func TestMissingField(t *testing.T) {
 	}
 }
 
+func TestWritePNGAtomic(t *testing.T) {
+	dir := t.TempDir()
+	img := image.NewGray(image.Rect(0, 0, 2, 2))
+	if err := writePNG(filepath.Join(dir, "out.png"), img); err != nil {
+		t.Fatal(err)
+	}
+	// The result is in place and no temporary file remains.
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 || entries[0].Name() != "out.png" {
+		t.Fatalf("entries %v, want only out.png", entries)
+	}
+	// A destination whose parent is a regular file must fail cleanly.
+	notDir := filepath.Join(dir, "plain")
+	if err := os.WriteFile(notDir, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := writePNG(filepath.Join(notDir, "out.png"), img); err == nil {
+		t.Fatal("want error for unwritable destination")
+	}
+}
+
 func TestEmptyTextRejected(t *testing.T) {
 	dir := t.TempDir()
 	lp := writeLayout(t, `{"version":1,"image":{"width":40,"height":40},"blocks":[{"id":"t","type":"text","x":0,"y":0,"width":40,"height":20,"field":"empty","font":{"family":"DejaVu Sans","size_px":12}}]}`)
