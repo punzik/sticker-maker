@@ -1,88 +1,53 @@
 # sticker-maker
 
-CLI-утилита на Go для формирования изображений наклеек для стикерного
-принтера. Программа читает JSON-шаблон наклейки и значения именованных полей,
-расставляет по холсту текстовые блоки и блоки Data Matrix и сохраняет
-чёрно-белый PNG.
+`sticker-maker` is a Linux command-line tool that renders sticker images from a JSON layout and named field values. Layouts can contain text and Data Matrix ECC 200 blocks. The output is an opaque black-and-white PNG with pixel-based dimensions and coordinates.
 
-- Целевая платформа — Linux.
-- Все координаты и размеры — в пикселях.
-- Результат — PNG только двух цветов (чёрный и белый), без прозрачности и
-  серых пикселей; однобитное кодирование PNG не требуется.
-- Управление принтером и отправка изображения на печать не входят в
-  функциональность программы.
+The tool only generates images; it does not communicate with a printer.
 
-## Содержание
+## Requirements
 
-- [Сборка и запуск](#сборка-и-запуск)
-- [Интерфейс командной строки](#интерфейс-командной-строки)
-- [JSON-шаблон](#json-шаблон)
-- [Геометрия и поворот](#геометрия-и-поворот)
-- [Текстовые блоки](#текстовые-блоки)
-- [Блоки Data Matrix](#блоки-data-matrix)
-- [Формирование изображения](#формирование-изображения)
-- [Диагностика](#диагностика)
-- [Примеры](#примеры)
-- [Проверка и тестирование](#проверка-и-тестирование)
-- [Ограничения первой версии](#ограничения-первой-версии)
-- [Структура проекта](#структура-проекта)
-- [Зависимости и реализация](#зависимости-и-реализация)
+- Go (see `go.mod` for the required version)
+- fontconfig (`fc-match` and `fc-list`) and installed system fonts when text blocks select fonts by family
 
-## Сборка и запуск
+A Nix development environment is included:
+
+```sh
+nix-shell
+```
+
+It provides Go, fontconfig, DejaVu fonts, and `dmtx-utils`.
+
+## Build
 
 ```sh
 go build -o sticker-maker .
 ```
 
-Зависимости системы: Go, fontconfig (`fc-match`, `fc-list`) и системные
-шрифты — для текстовых блоков. Для разработки и воспроизводимой сборки
-предусмотрен `shell.nix`:
+## Usage
 
 ```sh
-nix-shell            # Go + fontconfig + dejavu + dmtx-utils
-```
-
-## Интерфейс командной строки
-
-```sh
-sticker-maker \
-  --layout label.json \
-  --field title="Resistor 10 kOhm" \
-  --field code="PART-00123" \
+./sticker-maker \
+  --layout layouts/combined.json \
+  --field "title=Resistor 10 kOhm 1/4W" \
+  --field "code=PART-00123" \
   --output label.png
 ```
 
-| Флаг | Обязательный | Описание |
-|---|---|---|
-| `--layout` | да* | путь к JSON-шаблону |
-| `--output` | да* | путь к результирующему PNG |
-| `--field name=value` | по потребности | значение именованного поля; аргумент повторяемый |
-| `--list-fonts` | — | показать список системных шрифтов (семейство, стиль, файл) и завершиться |
-| `--help`, `-h` | — | показать краткую справку о вызове и завершиться (код возврата 0) |
+| Option | Description |
+|---|---|
+| `--layout FILE` | JSON layout file. Required when rendering. |
+| `--output FILE` | Output PNG file. Required when rendering. |
+| `--field NAME=VALUE` | Named field value. May be repeated. |
+| `--list-fonts` | List available font families, styles, and files, then exit. |
+| `--help`, `-h` | Show command usage. |
 
-`\*` — `--layout` и `--output` обязательны только при генерации изображения;
-с `--list-fonts` они не требуются.
+Each block gets its content from either a static `text` value or one named `field`. A block cannot interpolate multiple fields.
 
-Каждый блок получает содержимое либо из одного именованного поля
-(`"field": "name"`), либо из статической строки шаблона (`"text": "..."`).
-Интерполяция нескольких полей внутри одной строки не поддерживается.
+Invalid layouts, missing fields, unavailable fonts, text overflow, unsupported Data Matrix data, out-of-bounds blocks, and overlapping blocks are reported on standard error.
 
-Список системных шрифтов (таблица: семейство, стиль, файл):
+## Layout format
 
-```sh
-sticker-maker --list-fonts
-```
-
-Любая ошибка (отсутствующее поле, неизвестное свойство шаблона, нет шрифта,
-переполнение, некорректная геометрия) приводит к сообщению на stderr с
-указанием проблемного блока и параметра, коду возврата 1 и не создаёт
-файл-результат.
-
-## JSON-шаблон
-
-Шаблон содержит версию формата, размер изображения и список блоков.
-Разбор строгий: неизвестные свойства и неподдерживаемая версия — ошибка;
-все числовые ограничения и перечисления проверяются до отрисовки.
+Layouts are parsed strictly: unknown properties and unsupported format versions are rejected.
 
 ```json
 {
@@ -92,12 +57,16 @@ sticker-maker --list-fonts
     {
       "id": "title",
       "type": "text",
-      "x": 12, "y": 12,
-      "width": 228, "height": 120,
-      "rotation": 0,
+      "x": 12,
+      "y": 12,
+      "width": 228,
+      "height": 120,
       "field": "title",
-      "font": { "family": "DejaVu Sans", "style": "Book", "size_px": 24 },
-      "scale_x": 1.0,
+      "font": {
+        "family": "DejaVu Sans",
+        "style": "Book",
+        "size_px": 24
+      },
       "wrap": "word_char",
       "align": "left",
       "valign": "top",
@@ -106,8 +75,8 @@ sticker-maker --list-fonts
     {
       "id": "code",
       "type": "datamatrix",
-      "x": 246, "y": 12,
-      "rotation": 0,
+      "x": 246,
+      "y": 12,
       "field": "code",
       "symbol": { "rows": 24, "columns": 24 },
       "module_px": 5,
@@ -117,261 +86,109 @@ sticker-maker --list-fonts
 }
 ```
 
-### Общие поля блока
+### Top-level properties
 
-| Поле | Тип | Обязательный | По умолчанию | Описание |
-|---|---|---|---|---|
-| `id` | string | да | — | уникальное имя блока; используется в сообщениях об ошибках |
-| `type` | string | да | — | `text` или `datamatrix` |
-| `x`, `y` | int ≥ 0 | да | — | координаты левого верхнего угла итогового (после поворота) прямоугольника блока |
-| `rotation` | int | нет | `0` | поворот по часовой стрелке: `0`, `90`, `180`, `270` |
-| `text` | string | один из пары | — | статическое содержимое |
-| `field` | string | один из пары | — | имя поля из `--field`; ровно одно из `text`/`field` обязательно |
+| Property | Type | Description |
+|---|---|---|
+| `version` | integer | Layout format version. Must be `1`. |
+| `image.width`, `image.height` | positive integer | Output dimensions in pixels. |
+| `blocks` | array | Text and Data Matrix blocks. |
 
-## Геометрия и поворот
+### Common block properties
 
-- Начало координат — левый верхний угол; X вправо, Y вниз.
-- Координаты, размеры изображения и размеров текстовых блоков — целые
-  числа; размеры положительные, координаты неотрицательные.
-- Блок сначала формируется в собственной системе координат, затем
-  поворачивается на кратно 90° **без интерполяции** и размещается на холсте.
-- `width`/`height` текстового блока и размерность Data Matrix задают размер
-  блока **до поворота**; при `rotation` 90° или 270° итоговые ширина и
-  высота меняются местами.
-- `x`/`y` — левый верхний угол итогового прямоугольника **после** поворота.
-- Выход итогового прямоугольника блока за границы изображения — ошибка.
-- Перекрытия блоков запрещены (для Data Matrix — вместе с защитной зоной).
-  Касание границ допустимо.
+| Property | Required | Description |
+|---|---|---|
+| `id` | yes | Unique block identifier used in error messages. |
+| `type` | yes | `text` or `datamatrix`. |
+| `x`, `y` | yes | Non-negative position of the rotated block's top-left corner. |
+| `rotation` | no | Clockwise rotation: `0`, `90`, `180`, or `270`. Default: `0`. |
+| `text` | one of `text`/`field` | Static content. |
+| `field` | one of `text`/`field` | Name of a value supplied with `--field`. |
 
-## Текстовые блоки
+Coordinates start at the image's top-left corner, with X increasing to the right and Y increasing downward. A block is rendered first, rotated without interpolation, and then placed at `(x, y)`. For rotations of 90 or 270 degrees, its final width and height are swapped.
 
-Поддерживается латиница, включая цифры и знаки пунктуации.
+Blocks must remain inside the image and must not overlap. Edge contact is allowed. A Data Matrix block's quiet zone is part of its bounds.
 
-| Поле | Тип | Обязательный | По умолчанию | Описание |
-|---|---|---|---|---|
-| `width`, `height` | int > 0 | да | — | размеры блока до поворота |
-| `font.family` | string | один из пары | — | семейство системного шрифта (fontconfig) |
-| `font.style` | string | нет | — | начертание, например `Book`, `Bold`, `Oblique` |
-| `font.file` | string | один из пары | — | прямой путь к файлу TTF/OTF; вместо `family`/`style` |
-| `font.size_px` | number > 0 | да | — | размер шрифта в пикселях |
-| `scale_x` | number > 0 | нет | `1.0` | коэффициент горизонтального масштаба |
-| `wrap` | string | нет | `word_char` | режим переноса, см. ниже |
-| `align` | string | нет | `left` | горизонтальное выравнивание: `left`, `center`, `right` |
-| `valign` | string | нет | `top` | вертикальное выравнивание: `top`, `center`, `bottom` |
-| `overflow` | string | нет | `error` | поведение при переполнении, см. ниже |
+## Text blocks
 
-### Шрифты
+| Property | Required | Default | Description |
+|---|---|---|---|
+| `width`, `height` | yes | — | Positive block dimensions before rotation. |
+| `font.family` | one of family/file | — | Exact system font family resolved through fontconfig. |
+| `font.style` | no | — | Font style, such as `Book`, `Bold`, or `Oblique`. |
+| `font.file` | one of family/file | — | Direct path to a TTF or OTF file. |
+| `font.size_px` | yes | — | Positive font size in pixels. |
+| `scale_x` | no | `1.0` | Positive horizontal scale factor. |
+| `wrap` | no | `word_char` | `word`, `char`, `word_char`, or `none`. |
+| `align` | no | `left` | `left`, `center`, or `right`. |
+| `valign` | no | `top` | `top`, `center`, or `bottom`. |
+| `overflow` | no | `error` | `error` or `clip`. |
 
-- Системный шрифт выбирается по семейству и начертанию через fontconfig.
-  Если запрошенное семейство или начертание не найдено и fontconfig
-  подставляет другой шрифт, это **ошибка** — тихий fallback не допускается.
-- Явный путь к файлу шрифта (`font.file`) — альтернатива без fontconfig;
-  удобен для воспроизводимого результата на разных машинах.
-- Отсутствие необходимого глифа — ошибка; автоматическая подстановка
-  другого шрифта не выполняется.
+`word_char` wraps at word boundaries and splits words that are too wide. Explicit newlines are preserved. `scale_x` affects measurement, wrapping, and alignment.
 
-### Масштаб и перенос
+With `overflow: error`, rendering fails if the text does not fit. `clip` allows content outside the block to be cropped. Font size is never reduced automatically.
 
-- `scale_x` применяется к ширине текста и учитывается при измерении,
-  переносе строк и выравнивании: строка помещается, если
-  `natural_width * scale_x <= width`.
-- Явные переводы строк `\n` в содержимом всегда сохраняются; пустая
-  строка занимает одну строку (сохраняет вертикальный отступ).
-- Режимы `wrap`:
-  - `word` — перенос по словам; слишком длинное слово остаётся на своей
-    строке целиком и считается переполнением;
-  - `char` — перенос по символам;
-  - `word_char` — по словам, а слишком длинное слово — по символам
-    (значение по умолчанию);
-  - `none` — без автоматического переноса.
-- Перенос по символам не разрывает UTF-8 последовательности.
-- Автоматический перенос схлопывает последовательности пробелов в один
-  (ведущие/завершающие пробелы строки не отрисовываются); явные переводы
-  строк `\n` и их содержимое сохраняются.
-- Межстрочное расстояние определяется метриками выбранного шрифта.
+Fontconfig fallback is rejected when it does not match the requested family or style. Missing glyphs are also reported as errors. Use `font.file` when reproducible font selection is required.
 
-### Переполнение
+List fonts recognized by the tool with:
 
-- `overflow: error` (по умолчанию) — если текст не помещается по ширине
-  или высоте, генерация прекращается с ошибкой; незаметная потеря
-  содержимого исключена.
-- `overflow: clip` — явное разрешение обрезки текста по границам блока.
-- Автоматическое уменьшение размера шрифта не выполняется.
+```sh
+./sticker-maker --list-fonts
+```
 
-## Блоки Data Matrix
+## Data Matrix blocks
 
-- Формат — Data Matrix **ECC 200**.
-- Размерность символа задаётся явно (`symbol.rows`, `symbol.columns`),
-  без защитной зоны. Автоматический подбор размера не выполняется.
-- Произвольные размерности не допускаются — только список ниже.
-- Если данные не помещаются в выбранный размер — ошибка; символ не
-  увеличивается и данные не обрезаются.
-- Содержимое — только ASCII (включая строки из цифр); пустая строка и
-  не-ASCII данные отклоняются. GS1 DataMatrix не поддерживается.
-- Отрисовка без сглаживания и дробного масштабирования.
+Data Matrix blocks use ECC 200, fixed symbol dimensions, integer module scaling, and no antialiasing. Content must be non-empty ASCII. GS1 DataMatrix and automatic symbol-size selection are not supported.
 
-| Поле | Тип | Обязательный | По умолчанию | Описание |
-|---|---|---|---|---|
-| `symbol.rows`, `symbol.columns` | int > 0 | да | — | размерность символа в модулях |
-| `module_px` | int ≥ 1 | да | — | пикселей на один модуль (чёрную или белую ячейку) |
-| `quiet_zone_modules` | int ≥ 1 | нет | `1` | белая защитная зона, модулей с каждой стороны |
+| Property | Required | Default | Description |
+|---|---|---|---|
+| `symbol.rows`, `symbol.columns` | yes | — | Symbol dimensions in modules, excluding the quiet zone. |
+| `module_px` | yes | — | Positive number of pixels per module. |
+| `quiet_zone_modules` | no | `1` | Quiet-zone width in modules on each side; must be at least `1`. |
 
-### Поддерживаемые размерности
+Supported square sizes are:
 
-- **Квадратные** (rows = columns): 10, 12, 14, 16, 18, 20, 22, 24, 26, 32,
-  36, 40, 44, 48, 52, 64, 72, 80, 88, 96, 104, 120, 132, 144.
-- **Прямоугольные** (rows × columns, горизонтальная ориентация):
-  8×18, 8×32, 12×26, 12×36, 16×36, 16×48.
+```text
+10, 12, 14, 16, 18, 20, 22, 24, 26, 32, 36, 40, 44, 48,
+52, 64, 72, 80, 88, 96, 104, 120, 132, 144
+```
 
-Прочие стандартные размеры ISO/IEC 16022 (6×10, 8×12, 6×16, 8×20, 16×64
-и крупнее) выбранным кодировщиком не поддерживаются и отклоняются
-валидацией.
+Supported rectangular sizes (`rows × columns`) are:
 
-### Размер блока
+```text
+8×18, 8×32, 12×26, 12×36, 16×36, 16×48
+```
+
+The rendered size, including the quiet zone, is:
 
 ```text
 width_px  = (columns + 2 * quiet_zone_modules) * module_px
 height_px = (rows    + 2 * quiet_zone_modules) * module_px
 ```
 
-Пример: символ 24×24 с `module_px: 4` и защитной зоной 1 модуль занимает
-104×104 пикселя.
+Rendering fails if the content does not fit in the selected symbol.
 
-### Верификация сгенерированного символа
+## Example layouts
 
-Кодировщик при принудительной размерности не всегда надёжно отклоняет
-данные, которые в символ не влезают: в отдельных случаях он выдаёт символ,
-который не читает ни один декодер. Поэтому каждый сгенерированный символ
-до сохранения изображения дополнительно декодируется встроенным
-декодером (режим PURE_BARCODE) и результат сравнивается с исходными
-данными; несоответствие — ошибка.
+The `layouts/` directory contains:
 
-Исключение — 144×144: у встроенного декодера на этом размере баг
-Reed-Solomon (символы валидны, проверено независимым декодером dmtxread).
-Для 144×144 применяется резервная проверка по вместимости: ASCII-режим
-Data Matrix использует ровно один кодворд на символ, а вместимость
-символа 144×144 составляет 1304 data-кодворда, поэтому строка длиннее
-1304 ASCII-символов отклоняется.
+- `combined.json` — text and a square Data Matrix symbol
+- `text.json` — centered and horizontally scaled text
+- `datamatrix.json` — a square Data Matrix symbol
+- `rotated.json` — rotated text and a rectangular Data Matrix symbol
 
-## Формирование изображения
-
-- Фон — белый, текст и активные модули Data Matrix — чёрные.
-- Текст растеризируется со сглаживанием во внутреннем сером буфере и
-  преобразуется в два цвета по фиксированному порогу 128/255
-  (константа `Threshold` в `internal/texteng`).
-- Data Matrix рисуется сразу в двух цветах.
-- Повороты кратно 90° не создают промежуточных цветов.
-- Итоговый PNG имеет в точности заданные `image.width`/`image.height`,
-  не содержит прозрачности, серых и иных цветов. Перед записью выполняется
-  контрольная проверка палитры.
-
-## Диагностика
-
-Программа проверяет как минимум:
-
-- структуру и версию JSON, неизвестные свойства;
-- уникальность `id` блоков;
-- наличие и однозначность источника содержимого (`text`/`field`) и непустота
-  содержимого текстовых блоков (пустой или только пробельный текст — ошибка);
-- наличие обязательных полей;
-- допустимость числовых параметров, поворотов и значений перечислений;
-- доступность шрифта (семейство, стиль, файл) и глифов;
-- переполнение текстовых блоков (при `overflow: error`);
-- допустимость размерности Data Matrix, ASCII-содержимого и вместимости
-  символа;
-- выход блоков за изображение и их перекрытия;
-- ошибки чтения шаблона и записи PNG.
-
-Сообщения об ошибках указывают проблемный блок и параметр. Код возврата:
-0 — успех, 1 — ошибка (файл не создаётся).
-
-## Примеры
-
-Готовые шаблоны в каталоге `layouts/`:
-
-| Шаблон | Содержимое |
-|---|---|
-| `layouts/combined.json` | текст (2 строки, перенос) + квадратный Data Matrix 24×24 |
-| `layouts/text.json` | только текст: крупный, по центру, `scale_x: 1.1` |
-| `layouts/datamatrix.json` | только Data Matrix 24×24 |
-| `layouts/rotated.json` | текст, повёрнутый на 90°, + прямоугольный Data Matrix 8×18 |
-
-Запуск на смешанном шаблоне:
-
-```sh
-./sticker-maker --layout layouts/combined.json \
-  --field "title=Resistor 10 kOhm 1/4W" \
-  --field "code=PART-00123" \
-  --output out.png
-```
-
-## Проверка и тестирование
+## Tests
 
 ```sh
 go test ./...
 ```
 
-Набор покрывает: разбор и валидацию шаблона, режимы переноса, коды
-Data Matrix (все поддерживаемые размерности, вместимость, защитная зона),
-повороты, контроль геометрии и сквозной сценарий «шаблон + поля → PNG»
-с проверкой размеров и двухцветности.
-
-Дополнительно Data Matrix на сгенерированных PNG проверяется независимым
-декодером dmtxread (из nixpkgs; в `shell.nix` уже включён):
+To check a generated Data Matrix image with an independent decoder:
 
 ```sh
-nix-shell -c 'dmtxread out.png'
+nix-shell -c 'dmtxread label.png'
 ```
 
-## Ограничения первой версии
+## Limitations
 
-Не поддерживаются:
-
-- прямая печать и протоколы принтеров;
-- GUI и визуальный редактор шаблонов;
-- единицы в миллиметрах и пересчёт по DPI;
-- автоматический подбор размера Data Matrix;
-- GS1 DataMatrix и не-ASCII содержимое баркодов;
-- письменности, отличные от латиницы, и автоматический fallback шрифтов;
-- автоматическое уменьшение текста до размеров блока;
-- интерполяция нескольких полей в одном блоке;
-- повороты, не кратные 90°;
-- цветной вывод, градации серого, однобитное PNG.
-
-## Структура проекта
-
-```
-main.go                CLI и конвейер: блок → поворот → холст → PNG
-internal/config        JSON-схема, строгий разбор, валидация, именованные поля
-internal/texteng       шрифты (fontconfig/файл), метрики, перенос, отрисовка
-internal/dm            Data Matrix: кодирование фиксированной размерности,
-                       верификация декодированием, растеризация
-internal/compose       повороты, контроль геометрии, композитинг
-layouts/               примеры шаблонов
-shell.nix              окружение разработки (Go, fontconfig, шрифты, dmtx-utils)
-```
-
-## Зависимости и реализация
-
-- **Data Matrix** — `github.com/makiuchi-d/gozxing v0.1.1` (Apache-2.0).
-  Фиксированная размерность задаётся подсказками
-  `EncodeHintType_MIN_SIZE == EncodeHintType_MAX_SIZE`; для прямоугольных
-  символов дополнительно `DATA_MATRIX_SHAPE = FORCE_RECTANGLE`. Вывод
-  кодировщика сверен бит-в-бит с эталонным dmtxwrite; валидация —
-  встроенным декодером gozxing и независимым dmtxread.
-- **Текст** — `golang.org/x/image v0.26.0` (BSD-3). TTF/OTF через
-  `opentype.Parse`/`opentype.NewFace` (DPI 72, размер в пикселях),
-  метрики и растеризация — `font.Drawer`. Строка растеризируется в
-  натуральном масштабе, масштабируется по горизонтали (bilinear) и
-  порогуется до двух цветов.
-- **Поиск системных шрифтов** — `fc-match` (fontconfig), обязательный на
-  целевых Linux-системах; разрешённые семейство и стиль сверяются с
-  запросом (защита от тихого fallback). Альтернатива — явный файл шрифта.
-- **Независимая проверка** — `dmtxread` (dmtx-utils) для интеграционной
-  проверки декодируемости.
-- Отклонённые варианты: `github.com/boombuler/barcode` (только квадратные
-  размеры, без фиксированной размерности); API `golang.org/x/image v0.45.0`
-  (нестабильный, закреплён v0.26.0).
-
-Изображение воспроизводимо: при одинаковых шаблоне, данных, файлах
-шрифтов и версии программы результат одинаков.
+The tool does not provide direct printing, a GUI, physical units or DPI conversion, arbitrary-angle rotation, color output, automatic font fitting, multiple-field interpolation, or automatic font fallback.
