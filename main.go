@@ -31,17 +31,43 @@ func main() {
 	}
 	if err == errUsage {
 		printUsage(os.Stderr)
-	} else {
-		fmt.Fprintln(os.Stderr, "sticker-maker:", err)
+		os.Exit(2) // usage error, per convention
 	}
-	os.Exit(1)
+	fmt.Fprintln(os.Stderr, "sticker-maker:", err)
+	os.Exit(1) // runtime error
 }
 
 var errUsage = fmt.Errorf("usage error")
 
+// version is the tool version; override at build time with
+// -ldflags "-X main.version=...".
+var version = "0.1.0"
+
+// usageText follows the CLI guidelines: description first, usage lines,
+// flag descriptions, an example, and a pointer to --help.
+const usageText = `sticker-maker renders sticker images (black-and-white PNG) from a JSON
+layout and named field values.
+
+Usage:
+  sticker-maker --layout L.json --output out.png [--field name=value]...
+  sticker-maker --list-fonts
+
+Options:
+  --layout FILE       path to the JSON layout file (required when rendering)
+  --output FILE       path of the output PNG (required when rendering)
+  --field NAME=VALUE  field value; may be repeated
+  --list-fonts        list available fonts (family, style, file) and exit
+  --version           print version information and exit
+  -h, --help          show this help
+
+Example:
+  sticker-maker --layout layouts/combined.json \
+    --field "title=Resistor 10 kOhm" --field "code=PART-00123" \
+    --output label.png
+`
+
 func printUsage(w io.Writer) {
-	fmt.Fprintln(w, "usage: sticker-maker --layout L.json --output out.png --field name=value ...")
-	fmt.Fprintln(w, "       sticker-maker --list-fonts")
+	fmt.Fprint(w, usageText)
 }
 
 type fieldList []string
@@ -61,15 +87,22 @@ func run(args []string) error {
 	fs.SetOutput(nil)
 	fs.Usage = func() {} // usage is printed by main, not by the flag package
 	var fields fieldList
-	layoutPath := fs.String("layout", "", "path to the JSON layout file (required)")
-	outputPath := fs.String("output", "", "path of the output PNG (required)")
-	listFonts := fs.Bool("list-fonts", false, "list system fonts (family, style, file) and exit")
-	fs.Var(&fields, "field", "field value, format name=value (repeatable)")
+	// The flag package never prints here (output is nil); the flag
+	// documentation lives in usageText.
+	layoutPath := fs.String("layout", "", "")
+	outputPath := fs.String("output", "", "")
+	listFonts := fs.Bool("list-fonts", false, "")
+	showVersion := fs.Bool("version", false, "")
+	fs.Var(&fields, "field", "")
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return err // -h/--help: let main print usage and exit 0
 		}
 		return errUsage
+	}
+	if *showVersion {
+		fmt.Fprintf(os.Stdout, "sticker-maker %s\n", version)
+		return nil
 	}
 	if *listFonts {
 		return printFonts(os.Stdout)
@@ -168,7 +201,11 @@ func run(args []string) error {
 	if err := compose.Finalize(canvas); err != nil {
 		return err
 	}
-	return writePNG(*outputPath, canvas)
+	if err := writePNG(*outputPath, canvas); err != nil {
+		return err
+	}
+	fmt.Fprintf(os.Stderr, "wrote %s (%dx%d)\n", *outputPath, layout.Image.Width, layout.Image.Height)
+	return nil
 }
 
 // writePNG encodes the canvas into a temporary file in the destination

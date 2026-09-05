@@ -139,6 +139,12 @@ func TestEmptyTextRejected(t *testing.T) {
 	}
 }
 
+func TestVersionFlag(t *testing.T) {
+	if err := run([]string{"--version"}); err != nil {
+		t.Fatalf("run(--version): %v", err)
+	}
+}
+
 func TestUsage(t *testing.T) {
 	if err := run(nil); err != errUsage {
 		t.Fatalf("want usage error, got %v", err)
