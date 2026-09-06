@@ -9,8 +9,8 @@ pkgs.mkShell {
     pkgs.go
     pkgs.git
     pkgs.fontconfig
-    (if pkgs ? dejavu then pkgs.dejavu else pkgs.dejavu_fonts)
-    (if pkgs ? dmtxutils then pkgs.dmtxutils else pkgs."dmtx-utils")
+    pkgs.dejavu_fonts
+    pkgs.dmtx-utils
   ];
 
   shellHook = ''
