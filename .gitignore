@@ -2,3 +2,6 @@
 .gopath/
 result
 sticker-maker
+
+# Emacs lock files
+.#*
