@@ -133,25 +133,29 @@ func TestCheckOverlaps(t *testing.T) {
 }
 
 func TestLineExtent(t *testing.T) {
-	// Horizontal line: x span is exactly the endpoints, y is centered.
+	// Odd width: the stroke is symmetric about the segment.
 	if r, got := LineExtent(0, 5, 9, 5, 3); !got || r != (Rect{X: 0, Y: 4, W: 10, H: 3}) {
 		t.Fatalf("horizontal: %+v %v", r, got)
 	}
-	// Reversed endpoints and a single-pixel width.
-	if r, got := LineExtent(9, 5, 0, 5, 1); !got || r != (Rect{X: 0, Y: 5, W: 10, H: 1}) {
+	// Reversed endpoints give the same stroke.
+	if r, got := LineExtent(9, 5, 0, 5, 3); !got || r != (Rect{X: 0, Y: 4, W: 10, H: 3}) {
 		t.Fatalf("reversed: %+v %v", r, got)
 	}
-	// Vertical line.
-	if r, got := LineExtent(3, 1, 3, 4, 2); !got || r != (Rect{X: 3, Y: 1, W: 1, H: 4}) {
+	// A single-pixel-wide line sits on its coordinate row.
+	if r, got := LineExtent(9, 5, 0, 5, 1); !got || r != (Rect{X: 0, Y: 5, W: 10, H: 1}) {
+		t.Fatalf("width 1: %+v %v", r, got)
+	}
+	// Vertical line, even width: the extra pixel is to the right of the
+	// direction of travel (left side for a downward line).
+	if r, got := LineExtent(3, 1, 3, 4, 2); !got || r != (Rect{X: 2, Y: 1, W: 2, H: 4}) {
 		t.Fatalf("vertical: %+v %v", r, got)
 	}
-	// Even width: the stroke is centered on the segment, so a width of
-	// 4 covers 3 pixel rows perpendicular to it.
-	if r, got := LineExtent(0, 5, 9, 5, 4); !got || r != (Rect{X: 0, Y: 4, W: 10, H: 3}) {
+	// Even width covers exactly width pixel rows, skewed one pixel down.
+	if r, got := LineExtent(0, 5, 9, 5, 4); !got || r != (Rect{X: 0, Y: 4, W: 10, H: 4}) {
 		t.Fatalf("even width: %+v %v", r, got)
 	}
-	// Degenerate point: a filled square of width x width.
-	if r, got := LineExtent(4, 4, 4, 4, 3); !got || r != (Rect{X: 3, Y: 3, W: 3, H: 3}) {
+	// Degenerate point: a width x width square at the point.
+	if r, got := LineExtent(4, 4, 4, 4, 3); !got || r != (Rect{X: 4, Y: 4, W: 3, H: 3}) {
 		t.Fatalf("point: %+v %v", r, got)
 	}
 }
@@ -174,6 +178,20 @@ func TestDrawLine(t *testing.T) {
 	}
 	if pix(dst, 5, 3) || pix(dst, 5, 7) {
 		t.Fatal("line wider than requested")
+	}
+	// An even width must cover exactly width pixel rows, skewed one
+	// pixel down.
+	dst = NewCanvas(12, 12)
+	DrawLine(dst, 1, 5, 10, 5, 4)
+	for y := 4; y <= 7; y++ {
+		for x := 1; x <= 10; x++ {
+			if !pix(dst, x, y) {
+				t.Fatalf("even width: missing px (%d,%d)", x, y)
+			}
+		}
+	}
+	if pix(dst, 5, 3) || pix(dst, 5, 8) {
+		t.Fatal("even width: line wider than requested")
 	}
 
 	// A 1px diagonal connects through corner-adjacent pixels.

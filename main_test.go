@@ -234,6 +234,8 @@ func TestLineBlock(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// An odd width is symmetric: a width-3 horizontal line at y=15
+	// covers rows 14..16.
 	for x := 0; x < 60; x++ {
 		for _, y := range []int{14, 15, 16} {
 			if gray(img, x, y) != 0 {
@@ -241,7 +243,7 @@ func TestLineBlock(t *testing.T) {
 			}
 		}
 		// Outside the text block the rows beside the line must stay
-		// white (a glyph could legitimately touch row 13 over the text).
+		// white (a glyph could legitimately touch row 14 over the text).
 		if x >= 30 && (gray(img, x, 13) == 0 || gray(img, x, 17) == 0) {
 			t.Fatalf("line thicker than 3px at x=%d", x)
 		}

@@ -175,7 +175,7 @@ A line block draws a solid black line between two points, without antialiasing a
 | `x1`, `y1`, `x2`, `y2` | yes | Non-negative stroke endpoints in pixel coordinates. |
 | `width` | yes | Positive stroke thickness in pixels. |
 
-The stroke is centered on the segment with flat caps: a pixel is drawn when its center is within `(width-1)/2` of the segment. A horizontal or vertical line covers `width` pixel rows (columns) for an odd `width` and `width-1` for an even `width`. A `width` of `1` follows a Bresenham-style nearest-pixel path so diagonals stay connected.
+The stroke is centered on the segment and has flat caps: a pixel is drawn when its center is projected onto the segment and its perpendicular distance to the segment is within `(width-1)/2`. An odd `width` is symmetric about the line; an even `width` covers exactly `width` pixel rows (columns), skewed by one pixel to the right of the direction of travel (down for a horizontal line, left for a downward vertical line). A `width` of `1` is centered with a half-pixel band so diagonals stay connected. The direction of travel goes from the endpoint with the smaller x (then smaller y), so the result does not depend on the endpoint order.
 
 The `layouts/` directory contains:
 

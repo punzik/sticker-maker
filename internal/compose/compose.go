@@ -130,55 +130,58 @@ func CheckOverlaps(placed []NamedRect, forbidOverlap bool) error {
 	return nil
 }
 
-// lineSeg is a flat-capped line stroke in continuous coordinates.
+// lineSeg is a flat-capped line stroke in continuous coordinates: a band
+// of width pixels centered on the segment; for even widths the extra
+// pixel sits to the right of the direction of travel.
 type lineSeg struct {
-	ax, ay, dx, dy, l2, r2 float64
-	thin                   bool // width 1: nearest-pixel sweep for connectivity
+	ax, ay, dx, dy, len, width float64
 }
 
-// newLineSeg builds the stroke of width pixels around segment
-// (x1, y1) - (x2, y2); endpoint coordinates are pixel centers.
+// newLineSeg builds the width-pixel stroke over segment (x1, y1) -
+// (x2, y2); endpoint coordinates are pixel centers. The endpoint with the
+// smaller x (then smaller y) is taken as the start, so the stroke side
+// does not depend on the endpoint order in the layout.
 func newLineSeg(x1, y1, x2, y2, width int) lineSeg {
+	if x2 < x1 || (x2 == x1 && y2 < y1) {
+		x1, y1, x2, y2 = x2, y2, x1, y1
+	}
+	dx, dy := float64(x2-x1), float64(y2-y1)
 	return lineSeg{
 		ax: float64(x1) + 0.5, ay: float64(y1) + 0.5,
-		dx: float64(x2 - x1), dy: float64(y2 - y1),
-		l2:   float64(x2-x1)*float64(x2-x1) + float64(y2-y1)*float64(y2-y1),
-		r2:   float64(width-1) * float64(width-1) / 4,
-		thin: width == 1,
+		dx: dx, dy: dy,
+		len:   math.Hypot(dx, dy),
+		width: float64(width),
 	}
 }
 
 // contains reports whether the center of pixel (px, py) belongs to the
-// stroke: within (width-1)/2 of the segment and projected onto it.
+// stroke: projected onto the segment (flat caps) and at a signed
+// perpendicular distance s (positive to the left of the direction of
+// travel) of [-width/2, (width-1)/2]. Odd widths are symmetric about the
+// segment; even widths cover exactly width pixels, one of which sits to
+// the right of the segment (down for a horizontal line). Width 1 uses a
+// symmetric half-pixel band so shallow diagonals stay connected.
 func (s lineSeg) contains(px, py int) bool {
 	cx, cy := float64(px)+0.5, float64(py)+0.5
-	if s.l2 == 0 { // degenerate: a point
-		dx, dy := cx-s.ax, cy-s.ay
-		return dx*dx+dy*dy <= s.r2+1e-9
+	vx, vy := cx-s.ax, cy-s.ay
+	if s.len == 0 { // degenerate: a width x width square at the point
+		return vx >= -1e-9 && vx < s.width && vy >= -1e-9 && vy < s.width
 	}
-	if s.thin {
-		// A zero-radius band would hit only pixel centers exactly on the
-		// line, leaving gaps in shallow diagonals; instead take the pixel
-		// whose center is nearest to the line in the sweep direction
-		// (Bresenham-style), which stays 8-connected.
-		if math.Abs(s.dx) >= math.Abs(s.dy) {
-			t := (cx - s.ax) / s.dx
-			return t >= 0 && t <= 1 && py == int(math.Floor(s.ay+t*s.dy))
-		}
-		t := (cy - s.ay) / s.dy
-		return t >= 0 && t <= 1 && px == int(math.Floor(s.ax+t*s.dx))
-	}
-	t := ((cx-s.ax)*s.dx + (cy-s.ay)*s.dy) / s.l2
+	t := (vx*s.dx + vy*s.dy) / (s.len * s.len)
 	if t < 0 || t > 1 {
 		return false // flat cap
 	}
-	nx, ny := s.ax+t*s.dx, s.ay+t*s.dy
-	qx, qy := cx-nx, cy-ny
-	return qx*qx+qy*qy <= s.r2+1e-9
+	left := (vx*s.dy - vy*s.dx) / s.len
+	if s.width == 1 {
+		// A centered half-pixel band: the skewed band above would hit
+		// only some pixel centers of a shallow diagonal, leaving gaps.
+		return left >= -0.5-1e-9 && left <= 0.5+1e-9
+	}
+	return left >= -s.width/2-1e-9 && left <= (s.width-1)/2+1e-9
 }
 
-// LineExtent returns the pixel bounds of a line stroke and whether it
-// covers at least one pixel.
+// LineExtent returns the pixel bounds of a line stroke (see
+// newLineSeg) and whether it covers at least one pixel.
 func LineExtent(x1, y1, x2, y2, width int) (Rect, bool) {
 	seg := newLineSeg(x1, y1, x2, y2, width)
 	minx, maxx := x1, x2
