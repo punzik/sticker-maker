@@ -41,7 +41,7 @@ go build -o sticker-maker .
 | `--list-fonts` | List available font families, styles, and files, then exit. |
 | `--help`, `-h` | Show command usage. |
 
-Each block gets its content from either a static `text` value or one named `field`. A block cannot interpolate multiple fields.
+A block's content is a static `text` value when `text` is set; otherwise the block takes the named field matching its `id`. A block cannot interpolate multiple fields.
 
 Invalid layouts, missing fields, unavailable fonts, text overflow, unsupported Data Matrix data, out-of-bounds blocks, and — when `forbid_overlap` is set — overlapping blocks are reported on standard error.
 
@@ -61,7 +61,6 @@ Layouts are parsed strictly: unknown properties and unsupported format versions 
       "y": 12,
       "width": 228,
       "height": 120,
-      "field": "title",
       "font": {
         "family": "DejaVu Sans",
         "style": "Book",
@@ -77,7 +76,6 @@ Layouts are parsed strictly: unknown properties and unsupported format versions 
       "type": "datamatrix",
       "x": 246,
       "y": 12,
-      "field": "code",
       "symbol": { "rows": 24, "columns": 24 },
       "module_px": 5,
       "quiet_zone_modules": 1
@@ -103,8 +101,7 @@ Layouts are parsed strictly: unknown properties and unsupported format versions 
 | `type` | yes | `text` or `datamatrix`. |
 | `x`, `y` | yes | Non-negative position of the rotated block's top-left corner. |
 | `rotation` | no | Clockwise rotation: `0`, `90`, `180`, or `270`. Default: `0`. |
-| `text` | one of `text`/`field` | Static content. |
-| `field` | one of `text`/`field` | Name of a value supplied with `--field`. |
+| `text` | no | Static content. When omitted, the block takes the named field matching its `id`. |
 
 Coordinates start at the image's top-left corner, with X increasing to the right and Y increasing downward. A block occupies its final `width` x `height` rectangle at `(x, y)`, regardless of rotation: it is rendered first, rotated without interpolation, and then placed there. For a text block rotated by 90 or 270 degrees, the text is laid out in a transposed `height` x `width` box before rotation.
 

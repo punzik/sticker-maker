@@ -19,11 +19,10 @@ const layout = `{
   "image": { "width": 200, "height": 100 },
   "blocks": [
     { "id": "t", "type": "text", "x": 2, "y": 5, "width": 115, "height": 90,
-      "field": "title",
       "font": { "family": "DejaVu Sans", "style": "Book", "size_px": 16 },
       "wrap": "word_char", "align": "left", "valign": "top" },
     { "id": "code", "type": "datamatrix", "x": 122, "y": 5,
-      "field": "code", "symbol": { "rows": 24, "columns": 24 },
+      "symbol": { "rows": 24, "columns": 24 },
       "module_px": 3, "quiet_zone_modules": 1 }
   ]
 }`
@@ -56,7 +55,7 @@ func TestRenderEndToEnd(t *testing.T) {
 	requiresFonts(t)
 	lp := writeLayout(t, layout)
 	out := filepath.Join(t.TempDir(), "out.png")
-	err := run([]string{"--layout", lp, "--output", out, "--field", "title=Hello wrap", "--field", "code=END2END-1"})
+	err := run([]string{"--layout", lp, "--output", out, "--field", "t=Hello wrap", "--field", "code=END2END-1"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -100,7 +99,7 @@ func TestRenderEndToEnd(t *testing.T) {
 
 func TestMissingField(t *testing.T) {
 	lp := writeLayout(t, layout)
-	err := run([]string{"--layout", lp, "--output", filepath.Join(t.TempDir(), "x.png"), "--field", "title=x"})
+	err := run([]string{"--layout", lp, "--output", filepath.Join(t.TempDir(), "x.png"), "--field", "t=x"})
 	if err == nil || !strings.Contains(err.Error(), "code") {
 		t.Fatalf("want missing field error, got %v", err)
 	}
@@ -132,8 +131,8 @@ func TestWritePNGAtomic(t *testing.T) {
 
 func TestEmptyTextRejected(t *testing.T) {
 	dir := t.TempDir()
-	lp := writeLayout(t, `{"version":1,"image":{"width":40,"height":40},"blocks":[{"id":"t","type":"text","x":0,"y":0,"width":40,"height":20,"field":"empty","font":{"family":"DejaVu Sans","size_px":12}}]}`)
-	err := run([]string{"--layout", lp, "--output", filepath.Join(dir, "x.png"), "--field", "empty="})
+	lp := writeLayout(t, `{"version":1,"image":{"width":40,"height":40},"blocks":[{"id":"t","type":"text","x":0,"y":0,"width":40,"height":20,"font":{"family":"DejaVu Sans","size_px":12}}]}`)
+	err := run([]string{"--layout", lp, "--output", filepath.Join(dir, "x.png"), "--field", "t="})
 	if err == nil || !strings.Contains(err.Error(), "must not be empty") {
 		t.Fatalf("want empty content error, got %v", err)
 	}
@@ -251,7 +250,7 @@ func TestDataMatrixOverflow(t *testing.T) {
 	lp := writeLayout(t, `{
 	  "version": 1, "image": { "width": 50, "height": 50 },
 	  "blocks": [ { "id": "c", "type": "datamatrix", "x": 0, "y": 0,
-	    "field": "code", "symbol": { "rows": 10, "columns": 10 }, "module_px": 4 } ]
+	    "symbol": { "rows": 10, "columns": 10 }, "module_px": 4 } ]
 	}`)
 	out := filepath.Join(t.TempDir(), "out.png")
 	err := run([]string{"--layout", lp, "--output", out, "--field", "code=TOOLONG"})

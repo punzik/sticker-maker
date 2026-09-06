@@ -53,9 +53,9 @@ type Block struct {
 	ModulePx         int     `json:"module_px,omitempty"`
 	QuietZoneModules *int    `json:"quiet_zone_modules,omitempty"`
 
-	// Content source: exactly one of Text or Field must be set.
-	Text  *string `json:"text,omitempty"`
-	Field *string `json:"field,omitempty"`
+	// Content: static text when set; otherwise the named field matching
+	// the block's ID.
+	Text *string `json:"text,omitempty"`
 }
 
 // Font selects the typeface for a text block.
@@ -168,9 +168,6 @@ func (b *Block) Validate(i int) error {
 	case 0, 90, 180, 270:
 	default:
 		return fmt.Errorf("block %q: rotation must be 0, 90, 180 or 270, got %d", b.ID, b.Rotation)
-	}
-	if (b.Text == nil) == (b.Field == nil) {
-		return fmt.Errorf("block %q: exactly one of \"text\" or \"field\" must be set", b.ID)
 	}
 	switch b.Type {
 	case "text", "datamatrix":
@@ -298,17 +295,15 @@ func ParseField(s string) (string, string, error) {
 	return name, value, nil
 }
 
-// Content returns the block content, resolving its field reference.
+// Content returns the block content: static text when set, otherwise the
+// named field matching the block's ID.
 func (b *Block) Content(fields Fields) (string, error) {
-	switch {
-	case b.Text != nil:
+	if b.Text != nil {
 		return *b.Text, nil
-	case b.Field != nil:
-		v, ok := fields[*b.Field]
-		if !ok {
-			return "", fmt.Errorf("block %q: field %q was not provided", b.ID, *b.Field)
-		}
-		return v, nil
 	}
-	return "", fmt.Errorf("block %q: no content source", b.ID)
+	v, ok := fields[b.ID]
+	if !ok {
+		return "", fmt.Errorf("block %q: field %q was not provided", b.ID, b.ID)
+	}
+	return v, nil
 }

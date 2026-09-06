@@ -60,8 +60,6 @@ func TestErrors(t *testing.T) {
 		"zero image":            `{"version":1,"image":{"width":0,"height":1},"blocks":[]}`,
 		"no id":                 `{"version":1,"image":{"width":1,"height":1},"blocks":[{"type":"text","x":0,"y":0,"width":1,"height":1,"text":"a","font":{"family":"F","size_px":1}}]}`,
 		"dup id":                `{"version":1,"image":{"width":1,"height":1},"blocks":[{"id":"a","type":"text","x":0,"y":0,"width":1,"height":1,"text":"a","font":{"family":"F","size_px":1}},{"id":"a","type":"text","x":0,"y":0,"width":1,"height":1,"text":"a","font":{"family":"F","size_px":1}}]}`,
-		"both sources":          `{"version":1,"image":{"width":1,"height":1},"blocks":[{"id":"a","type":"text","x":0,"y":0,"width":1,"height":1,"text":"a","field":"f","font":{"family":"F","size_px":1}}]}`,
-		"no source":             `{"version":1,"image":{"width":1,"height":1},"blocks":[{"id":"a","type":"text","x":0,"y":0,"width":1,"height":1,"font":{"family":"F","size_px":1}}]}`,
 		"negative x":            `{"version":1,"image":{"width":1,"height":1},"blocks":[{"id":"a","type":"text","x":-1,"y":0,"width":1,"height":1,"text":"a","font":{"family":"F","size_px":1}}]}`,
 		"bad rotation":          `{"version":1,"image":{"width":1,"height":1},"blocks":[{"id":"a","type":"text","x":0,"y":0,"width":1,"height":1,"rotation":45,"text":"a","font":{"family":"F","size_px":1}}]}`,
 		"no font":               `{"version":1,"image":{"width":1,"height":1},"blocks":[{"id":"a","type":"text","x":0,"y":0,"width":1,"height":1,"text":"a"}]}`,
@@ -105,9 +103,9 @@ func TestFields(t *testing.T) {
 
 	l := mustParse(t, `{"version":1,"image":{"width":1,"height":1},"blocks":[
 		{"id":"a","type":"text","x":0,"y":0,"width":1,"height":1,"text":"static","font":{"family":"F","size_px":1}},
-		{"id":"b","type":"text","x":0,"y":0,"width":1,"height":1,"field":"f","font":{"family":"F","size_px":1}}
+		{"id":"b","type":"text","x":0,"y":0,"width":1,"height":1,"font":{"family":"F","size_px":1}}
 	]}`+`)`)
-	fields := Fields{"f": "42"}
+	fields := Fields{"b": "42"}
 	if got, err := l.Blocks[0].Content(fields); err != nil || got != "static" {
 		t.Fatalf("static content: %q %v", got, err)
 	}

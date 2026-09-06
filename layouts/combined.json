@@ -9,7 +9,6 @@
       "y": 12,
       "width": 228,
       "height": 120,
-      "field": "title",
       "font": { "family": "DejaVu Sans", "style": "Book", "size_px": 24 },
       "scale_x": 1.0,
       "wrap": "word_char",
@@ -35,7 +34,6 @@
       "type": "datamatrix",
       "x": 246,
       "y": 12,
-      "field": "code",
       "symbol": { "rows": 24, "columns": 24 },
       "module_px": 5,
       "quiet_zone_modules": 1

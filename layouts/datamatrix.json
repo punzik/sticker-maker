@@ -10,7 +10,6 @@
       "type": "datamatrix",
       "x": 3,
       "y": 3,
-      "field": "code",
       "symbol": {
         "rows": 24,
         "columns": 24
