@@ -53,6 +53,15 @@ func TestForbidOverlap(t *testing.T) {
 	}
 }
 
+func TestLineBlock(t *testing.T) {
+	l := mustParse(t, `{"version":1,"image":{"width":10,"height":10},"blocks":[
+		{"id":"ln","type":"line","x1":0,"y1":5,"x2":9,"y2":5,"width":3}]}`)
+	b := l.Blocks[0]
+	if b.X1 != 0 || b.Y1 != 5 || b.X2 != 9 || b.Y2 != 5 || b.Width != 3 {
+		t.Fatalf("bad line: %+v", b)
+	}
+}
+
 func TestErrors(t *testing.T) {
 	cases := map[string]string{
 		"unknown field":         `{"version":1,"image":{"width":1,"height":1},"blocks":[],"extra":true}`,
@@ -83,6 +92,16 @@ func TestErrors(t *testing.T) {
 		"width in datamatrix":   `{"version":1,"image":{"width":1,"height":1},"blocks":[{"id":"a","type":"datamatrix","x":0,"y":0,"text":"a","width":40,"symbol":{"rows":10,"columns":10},"module_px":2}]}`,
 		"font in datamatrix":    `{"version":1,"image":{"width":1,"height":1},"blocks":[{"id":"a","type":"datamatrix","x":0,"y":0,"text":"a","font":{"family":"F","size_px":1},"symbol":{"rows":10,"columns":10},"module_px":2}]}`,
 		"scale_x in datamatrix": `{"version":1,"image":{"width":1,"height":1},"blocks":[{"id":"a","type":"datamatrix","x":0,"y":0,"text":"a","scale_x":1,"symbol":{"rows":10,"columns":10},"module_px":2}]}`,
+		"line zero width":       `{"version":1,"image":{"width":1,"height":1},"blocks":[{"id":"a","type":"line","x1":0,"y1":0,"x2":0,"y2":0}]}`,
+		"line negative coord":   `{"version":1,"image":{"width":1,"height":1},"blocks":[{"id":"a","type":"line","x1":-1,"y1":0,"x2":0,"y2":0,"width":1}]}`,
+		"line rotation":         `{"version":1,"image":{"width":1,"height":1},"blocks":[{"id":"a","type":"line","x1":0,"y1":0,"x2":0,"y2":0,"width":1,"rotation":90}]}`,
+		"line x":                `{"version":1,"image":{"width":1,"height":1},"blocks":[{"id":"a","type":"line","x":1,"y":0,"x1":0,"y1":0,"x2":0,"y2":0,"width":1}]}`,
+		"line height":           `{"version":1,"image":{"width":1,"height":1},"blocks":[{"id":"a","type":"line","x1":0,"y1":0,"x2":0,"y2":0,"width":1,"height":2}]}`,
+		"line text":             `{"version":1,"image":{"width":1,"height":1},"blocks":[{"id":"a","type":"line","x1":0,"y1":0,"x2":0,"y2":0,"width":1,"text":"x"}]}`,
+		"line font":             `{"version":1,"image":{"width":1,"height":1},"blocks":[{"id":"a","type":"line","x1":0,"y1":0,"x2":0,"y2":0,"width":1,"font":{"family":"F","size_px":1}}]}`,
+		"line symbol":           `{"version":1,"image":{"width":1,"height":1},"blocks":[{"id":"a","type":"line","x1":0,"y1":0,"x2":0,"y2":0,"width":1,"symbol":{"rows":10,"columns":10}}]}`,
+		"x2 in text":            `{"version":1,"image":{"width":1,"height":1},"blocks":[{"id":"a","type":"text","x":0,"y":0,"width":1,"height":1,"text":"a","x1":0,"y1":0,"x2":5,"y2":0,"font":{"family":"F","size_px":1}}]}`,
+		"x2 in datamatrix":      `{"version":1,"image":{"width":1,"height":1},"blocks":[{"id":"a","type":"datamatrix","x":0,"y":0,"text":"a","x1":0,"y1":0,"x2":5,"y2":0,"symbol":{"rows":10,"columns":10},"module_px":2}]}`,
 	}
 	for name, s := range cases {
 		t.Run(name, func(t *testing.T) { wantErr(t, s) })

@@ -53,8 +53,14 @@ type Block struct {
 	ModulePx         int     `json:"module_px,omitempty"`
 	QuietZoneModules *int    `json:"quiet_zone_modules,omitempty"`
 
+	// Line blocks only: stroke endpoints in pixel coordinates.
+	X1 int `json:"x1,omitempty"`
+	Y1 int `json:"y1,omitempty"`
+	X2 int `json:"x2,omitempty"`
+	Y2 int `json:"y2,omitempty"`
+
 	// Content: static text when set; otherwise the named field matching
-	// the block's ID.
+	// the block's ID. Not used by line blocks.
 	Text *string `json:"text,omitempty"`
 }
 
@@ -161,18 +167,15 @@ func (b *Block) Validate(i int) error {
 	if b.ID == "" {
 		return fmt.Errorf("layout: block %d: missing id", i)
 	}
-	if b.X < 0 || b.Y < 0 {
-		return fmt.Errorf("block %q: x and y must be non-negative", b.ID)
-	}
 	switch b.Rotation {
 	case 0, 90, 180, 270:
 	default:
 		return fmt.Errorf("block %q: rotation must be 0, 90, 180 or 270, got %d", b.ID, b.Rotation)
 	}
 	switch b.Type {
-	case "text", "datamatrix":
+	case "text", "datamatrix", "line":
 	default:
-		return fmt.Errorf("block %q: unknown type %q (want \"text\" or \"datamatrix\")", b.ID, b.Type)
+		return fmt.Errorf("block %q: unknown type %q (want \"text\", \"datamatrix\" or \"line\")", b.ID, b.Type)
 	}
 	if err := b.validateApplicability(); err != nil {
 		return err
@@ -180,7 +183,9 @@ func (b *Block) Validate(i int) error {
 	switch b.Type {
 	case "text":
 		return b.validateText()
-	default: // "datamatrix", the only other accepted type
+	case "line":
+		return b.validateLine()
+	default: // "datamatrix"
 		return b.validateDataMatrix()
 	}
 }
@@ -194,7 +199,8 @@ func (b *Block) validateApplicability() error {
 		name string
 		set  bool
 	}
-	if b.Type == "text" {
+	switch b.Type {
+	case "text":
 		fields = []struct {
 			name string
 			set  bool
@@ -202,8 +208,12 @@ func (b *Block) validateApplicability() error {
 			{"symbol", b.Symbol != nil},
 			{"module_px", b.ModulePx != 0},
 			{"quiet_zone_modules", b.QuietZoneModules != nil},
+			{"x1", b.X1 != 0},
+			{"y1", b.Y1 != 0},
+			{"x2", b.X2 != 0},
+			{"y2", b.Y2 != 0},
 		}
-	} else {
+	case "datamatrix":
 		fields = []struct {
 			name string
 			set  bool
@@ -216,6 +226,30 @@ func (b *Block) validateApplicability() error {
 			{"align", b.Align != nil},
 			{"valign", b.Valign != nil},
 			{"overflow", b.Overflow != nil},
+			{"x1", b.X1 != 0},
+			{"y1", b.Y1 != 0},
+			{"x2", b.X2 != 0},
+			{"y2", b.Y2 != 0},
+		}
+	default: // "line"
+		fields = []struct {
+			name string
+			set  bool
+		}{
+			{"x", b.X != 0},
+			{"y", b.Y != 0},
+			{"height", b.Height != 0},
+			{"rotation", b.Rotation != 0},
+			{"text", b.Text != nil},
+			{"font", b.Font != nil},
+			{"scale_x", b.ScaleX != nil},
+			{"wrap", b.Wrap != nil},
+			{"align", b.Align != nil},
+			{"valign", b.Valign != nil},
+			{"overflow", b.Overflow != nil},
+			{"symbol", b.Symbol != nil},
+			{"module_px", b.ModulePx != 0},
+			{"quiet_zone_modules", b.QuietZoneModules != nil},
 		}
 	}
 	for _, f := range fields {
@@ -226,7 +260,20 @@ func (b *Block) validateApplicability() error {
 	return nil
 }
 
+func (b *Block) validateLine() error {
+	if b.X1 < 0 || b.Y1 < 0 || b.X2 < 0 || b.Y2 < 0 {
+		return fmt.Errorf("block %q: x1, y1, x2, y2 must be non-negative", b.ID)
+	}
+	if b.Width < 1 {
+		return fmt.Errorf("block %q: line width must be positive", b.ID)
+	}
+	return nil
+}
+
 func (b *Block) validateText() error {
+	if b.X < 0 || b.Y < 0 {
+		return fmt.Errorf("block %q: x and y must be non-negative", b.ID)
+	}
 	if b.Width < 1 || b.Height < 1 {
 		return fmt.Errorf("block %q: width and height must be positive", b.ID)
 	}
@@ -268,6 +315,9 @@ func (b *Block) validateText() error {
 }
 
 func (b *Block) validateDataMatrix() error {
+	if b.X < 0 || b.Y < 0 {
+		return fmt.Errorf("block %q: x and y must be non-negative", b.ID)
+	}
 	if b.Symbol == nil {
 		return fmt.Errorf("block %q: datamatrix block requires \"symbol\"", b.ID)
 	}

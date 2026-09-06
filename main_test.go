@@ -187,10 +187,18 @@ func TestRotatedTextAbsoluteDimensions(t *testing.T) {
 	for y := 0; y < img.Bounds().Dy(); y++ {
 		for x := 0; x < img.Bounds().Dx(); x++ {
 			if gray(img, x, y) == 0 {
-				if x < minx { minx = x }
-				if y < miny { miny = y }
-				if x > maxx { maxx = x }
-				if y > maxy { maxy = y }
+				if x < minx {
+					minx = x
+				}
+				if y < miny {
+					miny = y
+				}
+				if x > maxx {
+					maxx = x
+				}
+				if y > maxy {
+					maxy = y
+				}
 			}
 		}
 	}
@@ -202,6 +210,47 @@ func TestRotatedTextAbsoluteDimensions(t *testing.T) {
 	}
 	if maxy >= 80 {
 		t.Fatalf("black pixels at y=%d exceed the 80 px post-rotation height", maxy)
+	}
+}
+
+func TestLineBlock(t *testing.T) {
+	requiresFonts(t)
+	// A line may cross other blocks even with forbid_overlap set, but
+	// must stay inside the canvas.
+	lp := writeLayout(t, `{"version":1,"image":{"width":60,"height":30},"forbid_overlap":true,"blocks":[
+	  {"id":"t","type":"text","x":0,"y":0,"width":30,"height":30,
+	   "text":"AB","font":{"family":"DejaVu Sans","size_px":12}},
+	  {"id":"ln","type":"line","x1":0,"y1":15,"x2":59,"y2":15,"width":3}]}`)
+	out := filepath.Join(t.TempDir(), "out.png")
+	if err := run([]string{"--layout", lp, "--output", out}); err != nil {
+		t.Fatalf("line crossing a block must be allowed: %v", err)
+	}
+	f, err := os.Open(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	img, err := png.Decode(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for x := 0; x < 60; x++ {
+		for _, y := range []int{14, 15, 16} {
+			if gray(img, x, y) != 0 {
+				t.Fatalf("line missing at (%d,%d)", x, y)
+			}
+		}
+		// Outside the text block the rows beside the line must stay
+		// white (a glyph could legitimately touch row 13 over the text).
+		if x >= 30 && (gray(img, x, 13) == 0 || gray(img, x, 17) == 0) {
+			t.Fatalf("line thicker than 3px at x=%d", x)
+		}
+	}
+	// The same line one pixel further right is outside the canvas.
+	lp = writeLayout(t, `{"version":1,"image":{"width":60,"height":30},"blocks":[
+	  {"id":"ln","type":"line","x1":1,"y1":15,"x2":60,"y2":15,"width":3}]}`)
+	if err := run([]string{"--layout", lp, "--output", filepath.Join(t.TempDir(), "x.png")}); err == nil {
+		t.Fatal("out-of-bounds line must be rejected")
 	}
 }
 

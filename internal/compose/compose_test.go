@@ -103,32 +103,96 @@ func TestRect(t *testing.T) {
 	}
 }
 
-func TestCheckBoundsAndOverlaps(t *testing.T) {
+func TestCheckBounds(t *testing.T) {
 	canvas := Rect{W: 100, H: 50}
 	ok := []NamedRect{
 		{Name: "a", R: Rect{X: 0, Y: 0, W: 50, H: 50}},
 		{Name: "b", R: Rect{X: 50, Y: 0, W: 50, H: 50}}, // touches a
 	}
-	if err := CheckBoundsAndOverlaps(ok, canvas, true); err != nil {
+	if err := CheckBounds(ok, canvas); err != nil {
 		t.Fatalf("valid layout: %v", err)
 	}
 	out := append([]NamedRect{}, ok...)
 	out = append(out, NamedRect{Name: "c", R: Rect{X: 90, Y: 0, W: 20, H: 10}})
-	if err := CheckBoundsAndOverlaps(out, canvas, true); err == nil {
+	if err := CheckBounds(out, canvas); err == nil {
 		t.Fatal("out-of-bounds must be reported")
 	}
-	// Out-of-bounds is reported even when overlaps are allowed.
-	if err := CheckBoundsAndOverlaps(out, canvas, false); err == nil {
-		t.Fatal("out-of-bounds must be reported with overlaps allowed")
-	}
+}
+
+func TestCheckOverlaps(t *testing.T) {
 	ovl := []NamedRect{
 		{Name: "a", R: Rect{X: 0, Y: 0, W: 50, H: 50}},
 		{Name: "b", R: Rect{X: 49, Y: 0, W: 50, H: 50}},
 	}
-	if err := CheckBoundsAndOverlaps(ovl, canvas, true); err == nil {
+	if err := CheckOverlaps(ovl, true); err == nil {
 		t.Fatal("overlap must be reported")
 	}
-	if err := CheckBoundsAndOverlaps(ovl, canvas, false); err != nil {
+	if err := CheckOverlaps(ovl, false); err != nil {
 		t.Fatalf("overlap must be allowed by default: %v", err)
+	}
+}
+
+func TestLineExtent(t *testing.T) {
+	// Horizontal line: x span is exactly the endpoints, y is centered.
+	if r, got := LineExtent(0, 5, 9, 5, 3); !got || r != (Rect{X: 0, Y: 4, W: 10, H: 3}) {
+		t.Fatalf("horizontal: %+v %v", r, got)
+	}
+	// Reversed endpoints and a single-pixel width.
+	if r, got := LineExtent(9, 5, 0, 5, 1); !got || r != (Rect{X: 0, Y: 5, W: 10, H: 1}) {
+		t.Fatalf("reversed: %+v %v", r, got)
+	}
+	// Vertical line.
+	if r, got := LineExtent(3, 1, 3, 4, 2); !got || r != (Rect{X: 3, Y: 1, W: 1, H: 4}) {
+		t.Fatalf("vertical: %+v %v", r, got)
+	}
+	// Even width: the stroke is centered on the segment, so a width of
+	// 4 covers 3 pixel rows perpendicular to it.
+	if r, got := LineExtent(0, 5, 9, 5, 4); !got || r != (Rect{X: 0, Y: 4, W: 10, H: 3}) {
+		t.Fatalf("even width: %+v %v", r, got)
+	}
+	// Degenerate point: a filled square of width x width.
+	if r, got := LineExtent(4, 4, 4, 4, 3); !got || r != (Rect{X: 3, Y: 3, W: 3, H: 3}) {
+		t.Fatalf("point: %+v %v", r, got)
+	}
+}
+
+func TestDrawLine(t *testing.T) {
+	dst := NewCanvas(12, 12)
+	DrawLine(dst, 1, 5, 10, 5, 3)
+	for y := 4; y <= 6; y++ {
+		for x := 1; x <= 10; x++ {
+			if !pix(dst, x, y) {
+				t.Fatalf("missing px (%d,%d)", x, y)
+			}
+		}
+	}
+	if pix(dst, 0, 5) {
+		t.Fatal("flat cap: pixel before the start must stay white")
+	}
+	if pix(dst, 11, 5) {
+		t.Fatal("flat cap: pixel after the end must stay white")
+	}
+	if pix(dst, 5, 3) || pix(dst, 5, 7) {
+		t.Fatal("line wider than requested")
+	}
+
+	// A 1px diagonal connects through corner-adjacent pixels.
+	dst = NewCanvas(6, 6)
+	DrawLine(dst, 0, 0, 5, 5, 1)
+	for i := 0; i < 6; i++ {
+		if !pix(dst, i, i) {
+			t.Fatalf("missing diagonal px (%d,%d)", i, i)
+		}
+	}
+
+	// A line fully outside the canvas must not panic or draw.
+	dst = NewCanvas(4, 4)
+	DrawLine(dst, 10, 10, 20, 20, 3)
+	for y := 0; y < 4; y++ {
+		for x := 0; x < 4; x++ {
+			if pix(dst, x, y) {
+				t.Fatal("out-of-canvas line drew something")
+			}
+		}
 	}
 }

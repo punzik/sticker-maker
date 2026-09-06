@@ -1,6 +1,6 @@
 # sticker-maker
 
-`sticker-maker` is a Linux command-line tool that renders sticker images from a JSON layout and named field values. Layouts can contain text and Data Matrix ECC 200 blocks. The output is an opaque black-and-white PNG with pixel-based dimensions and coordinates.
+`sticker-maker` is a Linux command-line tool that renders sticker images from a JSON layout and named field values. Layouts can contain text, Data Matrix ECC 200 and line blocks. The output is an opaque black-and-white PNG with pixel-based dimensions and coordinates.
 
 The tool only generates images; it does not communicate with a printer.
 
@@ -98,14 +98,14 @@ Layouts are parsed strictly: unknown properties and unsupported format versions 
 | Property | Required | Description |
 |---|---|---|
 | `id` | yes | Unique block identifier used in error messages. |
-| `type` | yes | `text` or `datamatrix`. |
-| `x`, `y` | yes | Non-negative position of the rotated block's top-left corner. |
+| `type` | yes | `text`, `datamatrix`, or `line`. |
+| `x`, `y` | yes* | Non-negative position of the rotated block's top-left corner. Line blocks use `x1`/`y1`/`x2`/`y2` instead and do not support `rotation`. |
 | `rotation` | no | Clockwise rotation: `0`, `90`, `180`, or `270`. Default: `0`. |
 | `text` | no | Static content. When omitted, the block takes the named field matching its `id`. |
 
 Coordinates start at the image's top-left corner, with X increasing to the right and Y increasing downward. A block occupies its final `width` x `height` rectangle at `(x, y)`, regardless of rotation: it is rendered first, rotated without interpolation, and then placed there. For a text block rotated by 90 or 270 degrees, the text is laid out in a transposed `height` x `width` box before rotation.
 
-Blocks must remain inside the image. Overlapping blocks are allowed by default; set `forbid_overlap` to `true` to reject them. Edge contact is allowed. A Data Matrix block's quiet zone is part of its bounds.
+Blocks must remain inside the image. Overlapping blocks are allowed by default; set `forbid_overlap` to `true` to reject them. Edge contact is allowed. A Data Matrix block's quiet zone is part of its bounds. Line blocks are bounds-checked against their stroke but do not take part in the overlap check.
 
 ## Text blocks
 
@@ -166,7 +166,16 @@ height_px = (rows    + 2 * quiet_zone_modules) * module_px
 
 Rendering fails if the content does not fit in the selected symbol.
 
-## Example layouts
+## Line blocks
+
+A line block draws a solid black line between two points, without antialiasing and without content. It does not support `rotation` and does not take part in the overlap check.
+
+| Property | Required | Description |
+|---|---|---|
+| `x1`, `y1`, `x2`, `y2` | yes | Non-negative stroke endpoints in pixel coordinates. |
+| `width` | yes | Positive stroke thickness in pixels. |
+
+The stroke is centered on the segment with flat caps: a pixel is drawn when its center is within `(width-1)/2` of the segment. A horizontal or vertical line covers `width` pixel rows (columns) for an odd `width` and `width-1` for an even `width`. A `width` of `1` follows a Bresenham-style nearest-pixel path so diagonals stay connected.
 
 The `layouts/` directory contains:
 

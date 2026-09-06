@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"image"
 	"image/color"
+	"math"
 )
 
 // Rect is an axis-aligned rectangle with the top-left corner at (X, Y).
@@ -102,17 +103,24 @@ type NamedRect struct {
 	R    Rect
 }
 
-// CheckBoundsAndOverlaps verifies that all placed rectangles are inside the
-// canvas, and — when forbidOverlap is true — do not overlap each other.
-func CheckBoundsAndOverlaps(placed []NamedRect, canvas Rect, forbidOverlap bool) error {
+// CheckBounds verifies that all placed rectangles are inside the canvas.
+func CheckBounds(placed []NamedRect, canvas Rect) error {
 	for i := range placed {
 		if !placed[i].R.Inside(canvas) {
 			return fmt.Errorf("block %q: rectangle (%d,%d %dx%d) is outside the %dx%d canvas",
 				placed[i].Name, placed[i].R.X, placed[i].R.Y, placed[i].R.W, placed[i].R.H, canvas.W, canvas.H)
 		}
-		if !forbidOverlap {
-			continue
-		}
+	}
+	return nil
+}
+
+// CheckOverlaps, when forbidOverlap is true, verifies that no two placed
+// rectangles overlap each other.
+func CheckOverlaps(placed []NamedRect, forbidOverlap bool) error {
+	if !forbidOverlap {
+		return nil
+	}
+	for i := range placed {
 		for j := i + 1; j < len(placed); j++ {
 			if placed[i].R.Intersects(placed[j].R) {
 				return fmt.Errorf("blocks %q and %q overlap", placed[i].Name, placed[j].Name)
@@ -120,6 +128,115 @@ func CheckBoundsAndOverlaps(placed []NamedRect, canvas Rect, forbidOverlap bool)
 		}
 	}
 	return nil
+}
+
+// lineSeg is a flat-capped line stroke in continuous coordinates.
+type lineSeg struct {
+	ax, ay, dx, dy, l2, r2 float64
+	thin                   bool // width 1: nearest-pixel sweep for connectivity
+}
+
+// newLineSeg builds the stroke of width pixels around segment
+// (x1, y1) - (x2, y2); endpoint coordinates are pixel centers.
+func newLineSeg(x1, y1, x2, y2, width int) lineSeg {
+	return lineSeg{
+		ax: float64(x1) + 0.5, ay: float64(y1) + 0.5,
+		dx: float64(x2 - x1), dy: float64(y2 - y1),
+		l2:   float64(x2-x1)*float64(x2-x1) + float64(y2-y1)*float64(y2-y1),
+		r2:   float64(width-1) * float64(width-1) / 4,
+		thin: width == 1,
+	}
+}
+
+// contains reports whether the center of pixel (px, py) belongs to the
+// stroke: within (width-1)/2 of the segment and projected onto it.
+func (s lineSeg) contains(px, py int) bool {
+	cx, cy := float64(px)+0.5, float64(py)+0.5
+	if s.l2 == 0 { // degenerate: a point
+		dx, dy := cx-s.ax, cy-s.ay
+		return dx*dx+dy*dy <= s.r2+1e-9
+	}
+	if s.thin {
+		// A zero-radius band would hit only pixel centers exactly on the
+		// line, leaving gaps in shallow diagonals; instead take the pixel
+		// whose center is nearest to the line in the sweep direction
+		// (Bresenham-style), which stays 8-connected.
+		if math.Abs(s.dx) >= math.Abs(s.dy) {
+			t := (cx - s.ax) / s.dx
+			return t >= 0 && t <= 1 && py == int(math.Floor(s.ay+t*s.dy))
+		}
+		t := (cy - s.ay) / s.dy
+		return t >= 0 && t <= 1 && px == int(math.Floor(s.ax+t*s.dx))
+	}
+	t := ((cx-s.ax)*s.dx + (cy-s.ay)*s.dy) / s.l2
+	if t < 0 || t > 1 {
+		return false // flat cap
+	}
+	nx, ny := s.ax+t*s.dx, s.ay+t*s.dy
+	qx, qy := cx-nx, cy-ny
+	return qx*qx+qy*qy <= s.r2+1e-9
+}
+
+// LineExtent returns the pixel bounds of a line stroke and whether it
+// covers at least one pixel.
+func LineExtent(x1, y1, x2, y2, width int) (Rect, bool) {
+	seg := newLineSeg(x1, y1, x2, y2, width)
+	minx, maxx := x1, x2
+	if minx > maxx {
+		minx, maxx = maxx, minx
+	}
+	miny, maxy := y1, y2
+	if miny > maxy {
+		miny, maxy = maxy, miny
+	}
+	pad := width
+	var bnd Rect
+	got := false
+	for py := miny - pad; py <= maxy+pad; py++ {
+		for px := minx - pad; px <= maxx+pad; px++ {
+			if !seg.contains(px, py) {
+				continue
+			}
+			if !got {
+				bnd = Rect{X: px, Y: py, W: 1, H: 1}
+				got = true
+				continue
+			}
+			if px < bnd.X {
+				bnd.W += bnd.X - px
+				bnd.X = px
+			}
+			if px+1 > bnd.X+bnd.W {
+				bnd.W = px + 1 - bnd.X
+			}
+			if py < bnd.Y {
+				bnd.H += bnd.Y - py
+				bnd.Y = py
+			}
+			if py+1 > bnd.Y+bnd.H {
+				bnd.H = py + 1 - bnd.Y
+			}
+		}
+	}
+	return bnd, got
+}
+
+// DrawLine paints a line stroke (see LineExtent) onto dst in black,
+// clipping to dst bounds and without antialiasing.
+func DrawLine(dst *image.Gray, x1, y1, x2, y2, width int) {
+	seg := newLineSeg(x1, y1, x2, y2, width)
+	bnd, got := LineExtent(x1, y1, x2, y2, width)
+	if !got {
+		return
+	}
+	c := dst.Bounds()
+	for y := max(c.Min.Y, bnd.Y); y < min(c.Max.Y, bnd.Y+bnd.H); y++ {
+		for x := max(c.Min.X, bnd.X); x < min(c.Max.X, bnd.X+bnd.W); x++ {
+			if seg.contains(x, y) {
+				dst.SetGray(x, y, color.Gray{0})
+			}
+		}
+	}
 }
 
 // Finalize verifies that the output contains no anti-aliased or gray

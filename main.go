@@ -199,12 +199,17 @@ func run(args []string) error {
 		rect compose.Rect
 	}
 	var placed []placedBlock
+	var lineRects []compose.NamedRect // lines: bounds-checked, never overlap-checked
 
 	for i := range layout.Blocks {
 		b := &layout.Blocks[i]
-		content, err := b.Content(vals)
-		if err != nil {
-			return err
+		var content string
+		if b.Type != "line" {
+			var err error
+			content, err = b.Content(vals)
+			if err != nil {
+				return err
+			}
 		}
 		if b.Type == "text" && strings.TrimSpace(content) == "" {
 			// An empty text block would print as blank; reject it the way
@@ -227,19 +232,19 @@ func run(args []string) error {
 			// width/height describe the block's final rectangle after
 			// rotation, so for a 90/270 rotation the text is laid out in a
 			// transposed box that becomes width x height after rotating.
-				rw, rh := b.Width, b.Height
-				if b.Rotation%180 == 90 {
-					rw, rh = b.Height, b.Width
-				}
-				res, err := face.Render(content, texteng.Params{
-					Width: rw, Height: rh, ScaleX: *b.ScaleX,
-					Wrap: *b.Wrap, Align: *b.Align, Valign: *b.Valign, Overflow: *b.Overflow,
-				})
-				if err != nil {
-					return fmt.Errorf("block %q: %w", b.ID, err)
-				}
-				blk = res.Image
-				bw, bh = rw, rh
+			rw, rh := b.Width, b.Height
+			if b.Rotation%180 == 90 {
+				rw, rh = b.Height, b.Width
+			}
+			res, err := face.Render(content, texteng.Params{
+				Width: rw, Height: rh, ScaleX: *b.ScaleX,
+				Wrap: *b.Wrap, Align: *b.Align, Valign: *b.Valign, Overflow: *b.Overflow,
+			})
+			if err != nil {
+				return fmt.Errorf("block %q: %w", b.ID, err)
+			}
+			blk = res.Image
+			bw, bh = rw, rh
 		case "datamatrix":
 			bm, err := dm.Encode(content, b.Symbol.Rows, b.Symbol.Columns)
 			if err != nil {
@@ -247,6 +252,10 @@ func run(args []string) error {
 			}
 			blk = dm.Render(bm, b.ModulePx, *b.QuietZoneModules)
 			bw, bh = dm.Size(b.Symbol.Rows, b.Symbol.Columns, b.ModulePx, *b.QuietZoneModules)
+		case "line":
+			r, _ := compose.LineExtent(b.X1, b.Y1, b.X2, b.Y2, b.Width)
+			lineRects = append(lineRects, compose.NamedRect{Name: b.ID, R: r})
+			continue
 		default:
 			// Config validation rejects other types; guard anyway so a
 			// future caller cannot nil-deref blk.
@@ -271,12 +280,22 @@ func run(args []string) error {
 	for i, p := range placed {
 		named[i] = compose.NamedRect{Name: p.name, R: p.rect}
 	}
-	if err := compose.CheckBoundsAndOverlaps(named, compose.Rect{W: layout.Image.Width, H: layout.Image.Height}, layout.ForbidOverlap); err != nil {
+	canvasRect := compose.Rect{W: layout.Image.Width, H: layout.Image.Height}
+	if err := compose.CheckBounds(append(named, lineRects...), canvasRect); err != nil {
+		return err
+	}
+	if err := compose.CheckOverlaps(named, layout.ForbidOverlap); err != nil {
 		return err
 	}
 	canvas := compose.NewCanvas(layout.Image.Width, layout.Image.Height)
 	for _, p := range placed {
 		compose.Place(canvas, p.img, p.rect.X, p.rect.Y)
+	}
+	for i := range layout.Blocks {
+		b := &layout.Blocks[i]
+		if b.Type == "line" {
+			compose.DrawLine(canvas, b.X1, b.Y1, b.X2, b.Y2, b.Width)
+		}
 	}
 	if err := compose.Finalize(canvas); err != nil {
 		return err
