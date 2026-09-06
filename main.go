@@ -224,15 +224,22 @@ func run(args []string) error {
 			if err != nil {
 				return fmt.Errorf("block %q: %w", b.ID, err)
 			}
-			res, err := face.Render(content, texteng.Params{
-				Width: b.Width, Height: b.Height, ScaleX: *b.ScaleX,
-				Wrap: *b.Wrap, Align: *b.Align, Valign: *b.Valign, Overflow: *b.Overflow,
-			})
-			if err != nil {
-				return fmt.Errorf("block %q: %w", b.ID, err)
-			}
-			blk = res.Image
-			bw, bh = b.Width, b.Height
+			// width/height describe the block's final rectangle after
+			// rotation, so for a 90/270 rotation the text is laid out in a
+			// transposed box that becomes width x height after rotating.
+				rw, rh := b.Width, b.Height
+				if b.Rotation%180 == 90 {
+					rw, rh = b.Height, b.Width
+				}
+				res, err := face.Render(content, texteng.Params{
+					Width: rw, Height: rh, ScaleX: *b.ScaleX,
+					Wrap: *b.Wrap, Align: *b.Align, Valign: *b.Valign, Overflow: *b.Overflow,
+				})
+				if err != nil {
+					return fmt.Errorf("block %q: %w", b.ID, err)
+				}
+				blk = res.Image
+				bw, bh = rw, rh
 		case "datamatrix":
 			bm, err := dm.Encode(content, b.Symbol.Rows, b.Symbol.Columns)
 			if err != nil {

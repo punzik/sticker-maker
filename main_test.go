@@ -6,6 +6,7 @@ import (
 	"image"
 	"image/png"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -17,11 +18,11 @@ const layout = `{
   "version": 1,
   "image": { "width": 200, "height": 100 },
   "blocks": [
-    { "id": "t", "type": "text", "x": 5, "y": 5, "width": 120, "height": 90,
+    { "id": "t", "type": "text", "x": 2, "y": 5, "width": 115, "height": 90,
       "field": "title",
       "font": { "family": "DejaVu Sans", "style": "Book", "size_px": 16 },
       "wrap": "word_char", "align": "left", "valign": "top" },
-    { "id": "code", "type": "datamatrix", "x": 140, "y": 5,
+    { "id": "code", "type": "datamatrix", "x": 122, "y": 5,
       "field": "code", "symbol": { "rows": 24, "columns": 24 },
       "module_px": 3, "quiet_zone_modules": 1 }
   ]
@@ -43,8 +44,11 @@ func gray(img image.Image, x, y int) uint32 {
 
 func requiresFonts(t *testing.T) {
 	t.Helper()
-	if _, err := os.Stat("/usr/share/fonts"); err != nil {
-		t.Skip("no system fonts installed")
+	// Font availability is what the tool needs: fonts may live in
+	// non-standard directories (e.g. the Nix store), so check
+	// fontconfig rather than a fixed path.
+	if out, err := exec.Command("fc-list").Output(); err != nil || len(out) == 0 {
+		t.Skip("no system fonts available")
 	}
 }
 
@@ -80,10 +84,10 @@ func TestRenderEndToEnd(t *testing.T) {
 		t.Fatalf("colors %v, want exactly {0,255}", seen)
 	}
 	// the Data Matrix region must contain black modules
-	// 24*3 + 2*1*3 = 78 px at (140,5)
+	// 24*3 + 2*1*3 = 78 px at (122,5)
 	foundBlack := false
 	for y := 5; y < 5+78; y++ {
-		for x := 140; x < 140+78; x++ {
+		for x := 122; x < 122+78; x++ {
 			if gray(img, x, y) == 0 {
 				foundBlack = true
 			}
@@ -136,6 +140,51 @@ func TestEmptyTextRejected(t *testing.T) {
 	lp = writeLayout(t, `{"version":1,"image":{"width":40,"height":40},"blocks":[{"id":"t","type":"text","x":0,"y":0,"width":40,"height":20,"text":"   ","font":{"family":"DejaVu Sans","size_px":12}}]}`)
 	if err := run([]string{"--layout", lp, "--output", filepath.Join(dir, "y.png")}); err == nil {
 		t.Fatal("want error for whitespace-only static text")
+	}
+}
+
+func TestRotatedTextAbsoluteDimensions(t *testing.T) {
+	requiresFonts(t)
+	// width/height are the final post-rotation dimensions: with
+	// rotation 90 the block must occupy 30 px by X and 80 px by Y,
+	// so the text is laid out in a transposed 80 x 30 box. Under the
+	// old pre-rotation semantics "ABCD" (~64 px) would not fit the
+	// 30 px render box and rendering would fail.
+	lp := writeLayout(t, `{"version":1,"image":{"width":100,"height":100},"blocks":[
+	  {"id":"t","type":"text","x":0,"y":0,"width":30,"height":80,"rotation":90,
+	   "text":"ABCD","font":{"family":"DejaVu Sans","size_px":24},"overflow":"error"}]}`)
+	out := filepath.Join(t.TempDir(), "out.png")
+	if err := run([]string{"--layout", lp, "--output", out}); err != nil {
+		t.Fatal(err)
+	}
+	f, err := os.Open(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	img, err := png.Decode(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	minx, miny, maxx, maxy := 1<<30, 1<<30, -1, -1
+	for y := 0; y < img.Bounds().Dy(); y++ {
+		for x := 0; x < img.Bounds().Dx(); x++ {
+			if gray(img, x, y) == 0 {
+				if x < minx { minx = x }
+				if y < miny { miny = y }
+				if x > maxx { maxx = x }
+				if y > maxy { maxy = y }
+			}
+		}
+	}
+	if maxx < 0 {
+		t.Fatal("no black pixels rendered")
+	}
+	if maxx >= 30 {
+		t.Fatalf("black pixels at x=%d exceed the 30 px post-rotation width", maxx)
+	}
+	if maxy >= 80 {
+		t.Fatalf("black pixels at y=%d exceed the 80 px post-rotation height", maxy)
 	}
 }
 

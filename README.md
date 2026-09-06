@@ -105,7 +105,7 @@ Layouts are parsed strictly: unknown properties and unsupported format versions 
 | `text` | one of `text`/`field` | Static content. |
 | `field` | one of `text`/`field` | Name of a value supplied with `--field`. |
 
-Coordinates start at the image's top-left corner, with X increasing to the right and Y increasing downward. A block is rendered first, rotated without interpolation, and then placed at `(x, y)`. For rotations of 90 or 270 degrees, its final width and height are swapped.
+Coordinates start at the image's top-left corner, with X increasing to the right and Y increasing downward. A block occupies its final `width` x `height` rectangle at `(x, y)`, regardless of rotation: it is rendered first, rotated without interpolation, and then placed there. For a text block rotated by 90 or 270 degrees, the text is laid out in a transposed `height` x `width` box before rotation.
 
 Blocks must remain inside the image and must not overlap. Edge contact is allowed. A Data Matrix block's quiet zone is part of its bounds.
 
@@ -113,7 +113,7 @@ Blocks must remain inside the image and must not overlap. Edge contact is allowe
 
 | Property | Required | Default | Description |
 |---|---|---|---|
-| `width`, `height` | yes | — | Positive block dimensions before rotation. |
+| `width`, `height` | yes | — | Positive final block dimensions on the canvas (after rotation). |
 | `font.family` | one of family/file | — | Exact system font family resolved through fontconfig. |
 | `font.style` | no | — | Font style, such as `Book`, `Bold`, or `Oblique`. |
 | `font.file` | one of family/file | — | Direct path to a TTF or OTF file. |

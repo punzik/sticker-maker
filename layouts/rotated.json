@@ -10,8 +10,8 @@
       "type": "text",
       "x": 10,
       "y": 10,
-      "width": 100,
-      "height": 56,
+      "width": 56,
+      "height": 100,
       "text": "Vertical text",
       "font": {
         "family": "DejaVu Sans",
