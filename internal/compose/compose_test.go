@@ -109,19 +109,26 @@ func TestCheckBoundsAndOverlaps(t *testing.T) {
 		{Name: "a", R: Rect{X: 0, Y: 0, W: 50, H: 50}},
 		{Name: "b", R: Rect{X: 50, Y: 0, W: 50, H: 50}}, // touches a
 	}
-	if err := CheckBoundsAndOverlaps(ok, canvas); err != nil {
+	if err := CheckBoundsAndOverlaps(ok, canvas, true); err != nil {
 		t.Fatalf("valid layout: %v", err)
 	}
 	out := append([]NamedRect{}, ok...)
 	out = append(out, NamedRect{Name: "c", R: Rect{X: 90, Y: 0, W: 20, H: 10}})
-	if err := CheckBoundsAndOverlaps(out, canvas); err == nil {
+	if err := CheckBoundsAndOverlaps(out, canvas, true); err == nil {
 		t.Fatal("out-of-bounds must be reported")
+	}
+	// Out-of-bounds is reported even when overlaps are allowed.
+	if err := CheckBoundsAndOverlaps(out, canvas, false); err == nil {
+		t.Fatal("out-of-bounds must be reported with overlaps allowed")
 	}
 	ovl := []NamedRect{
 		{Name: "a", R: Rect{X: 0, Y: 0, W: 50, H: 50}},
 		{Name: "b", R: Rect{X: 49, Y: 0, W: 50, H: 50}},
 	}
-	if err := CheckBoundsAndOverlaps(ovl, canvas); err == nil {
+	if err := CheckBoundsAndOverlaps(ovl, canvas, true); err == nil {
 		t.Fatal("overlap must be reported")
+	}
+	if err := CheckBoundsAndOverlaps(ovl, canvas, false); err != nil {
+		t.Fatalf("overlap must be allowed by default: %v", err)
 	}
 }

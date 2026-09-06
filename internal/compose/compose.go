@@ -103,12 +103,15 @@ type NamedRect struct {
 }
 
 // CheckBoundsAndOverlaps verifies that all placed rectangles are inside the
-// canvas and do not overlap each other.
-func CheckBoundsAndOverlaps(placed []NamedRect, canvas Rect) error {
+// canvas, and — when forbidOverlap is true — do not overlap each other.
+func CheckBoundsAndOverlaps(placed []NamedRect, canvas Rect, forbidOverlap bool) error {
 	for i := range placed {
 		if !placed[i].R.Inside(canvas) {
 			return fmt.Errorf("block %q: rectangle (%d,%d %dx%d) is outside the %dx%d canvas",
 				placed[i].Name, placed[i].R.X, placed[i].R.Y, placed[i].R.W, placed[i].R.H, canvas.W, canvas.H)
+		}
+		if !forbidOverlap {
+			continue
 		}
 		for j := i + 1; j < len(placed); j++ {
 			if placed[i].R.Intersects(placed[j].R) {

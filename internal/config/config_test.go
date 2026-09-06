@@ -43,6 +43,16 @@ func TestMinimal(t *testing.T) {
 	}
 }
 
+func TestForbidOverlap(t *testing.T) {
+	l := mustParse(t, `{"version":1,"image":{"width":1,"height":1},"blocks":[],"forbid_overlap":true}`)
+	if !l.ForbidOverlap {
+		t.Fatal("forbid_overlap not parsed")
+	}
+	if mustParse(t, minimal).ForbidOverlap {
+		t.Fatal("forbid_overlap default must be false")
+	}
+}
+
 func TestErrors(t *testing.T) {
 	cases := map[string]string{
 		"unknown field":         `{"version":1,"image":{"width":1,"height":1},"blocks":[],"extra":true}`,

@@ -19,6 +19,9 @@ type Layout struct {
 	Version int     `json:"version"`
 	Image   Image   `json:"image"`
 	Blocks  []Block `json:"blocks"`
+	// ForbidOverlap rejects overlapping blocks; by default blocks may
+	// overlap.
+	ForbidOverlap bool `json:"forbid_overlap"`
 }
 
 // Image describes the output canvas size in pixels.

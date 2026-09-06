@@ -143,6 +143,24 @@ func TestEmptyTextRejected(t *testing.T) {
 	}
 }
 
+func TestOverlapDefaultAndForbidden(t *testing.T) {
+	requiresFonts(t)
+	const ovl = `"blocks":[
+	  {"id":"a","type":"text","x":0,"y":0,"width":30,"height":30,
+	   "text":"A","font":{"family":"DejaVu Sans","size_px":12}},
+	  {"id":"b","type":"text","x":10,"y":0,"width":30,"height":30,
+	   "text":"B","font":{"family":"DejaVu Sans","size_px":12}}]`
+	lp := writeLayout(t, `{"version":1,"image":{"width":60,"height":30},`+ovl+`}`)
+	if err := run([]string{"--layout", lp, "--output", filepath.Join(t.TempDir(), "a.png")}); err != nil {
+		t.Fatalf("overlapping blocks must be allowed by default: %v", err)
+	}
+	lp = writeLayout(t, `{"version":1,"image":{"width":60,"height":30},"forbid_overlap":true,`+ovl+`}`)
+	err := run([]string{"--layout", lp, "--output", filepath.Join(t.TempDir(), "b.png")})
+	if err == nil || !strings.Contains(err.Error(), `"a" and "b" overlap`) {
+		t.Fatalf("want overlap error, got %v", err)
+	}
+}
+
 func TestRotatedTextAbsoluteDimensions(t *testing.T) {
 	requiresFonts(t)
 	// width/height are the final post-rotation dimensions: with

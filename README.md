@@ -43,7 +43,7 @@ go build -o sticker-maker .
 
 Each block gets its content from either a static `text` value or one named `field`. A block cannot interpolate multiple fields.
 
-Invalid layouts, missing fields, unavailable fonts, text overflow, unsupported Data Matrix data, out-of-bounds blocks, and overlapping blocks are reported on standard error.
+Invalid layouts, missing fields, unavailable fonts, text overflow, unsupported Data Matrix data, out-of-bounds blocks, and — when `forbid_overlap` is set — overlapping blocks are reported on standard error.
 
 ## Layout format
 
@@ -93,6 +93,7 @@ Layouts are parsed strictly: unknown properties and unsupported format versions 
 | `version` | integer | Layout format version. Must be `1`. |
 | `image.width`, `image.height` | positive integer | Output dimensions in pixels. |
 | `blocks` | array | Text and Data Matrix blocks. |
+| `forbid_overlap` | boolean | Default: `false`. When `true`, overlapping blocks are rejected. |
 
 ### Common block properties
 
@@ -107,7 +108,7 @@ Layouts are parsed strictly: unknown properties and unsupported format versions 
 
 Coordinates start at the image's top-left corner, with X increasing to the right and Y increasing downward. A block occupies its final `width` x `height` rectangle at `(x, y)`, regardless of rotation: it is rendered first, rotated without interpolation, and then placed there. For a text block rotated by 90 or 270 degrees, the text is laid out in a transposed `height` x `width` box before rotation.
 
-Blocks must remain inside the image and must not overlap. Edge contact is allowed. A Data Matrix block's quiet zone is part of its bounds.
+Blocks must remain inside the image. Overlapping blocks are allowed by default; set `forbid_overlap` to `true` to reject them. Edge contact is allowed. A Data Matrix block's quiet zone is part of its bounds.
 
 ## Text blocks
 

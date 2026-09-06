@@ -271,7 +271,7 @@ func run(args []string) error {
 	for i, p := range placed {
 		named[i] = compose.NamedRect{Name: p.name, R: p.rect}
 	}
-	if err := compose.CheckBoundsAndOverlaps(named, compose.Rect{W: layout.Image.Width, H: layout.Image.Height}); err != nil {
+	if err := compose.CheckBoundsAndOverlaps(named, compose.Rect{W: layout.Image.Width, H: layout.Image.Height}, layout.ForbidOverlap); err != nil {
 		return err
 	}
 	canvas := compose.NewCanvas(layout.Image.Width, layout.Image.Height)
